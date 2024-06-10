@@ -2,119 +2,189 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Earthquake Information</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <title>Earthquake Data</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
-        #map { height: 500px; margin-bottom: 10px; }
-        #statusBar { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; color: #fff; padding: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .pagination { margin-top: 10px; text-align: center; }
-        .pagination button { margin: 0 5px; padding: 5px 10px; }
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #f8f9fa;
+            text-align: center;
+            padding: 10px;
+            border-top: 1px solid #dee2e6;
+        }
+        #table-container {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <div id="statusBar">Status: Ready</div>
-    <table id="earthquakeTable">
-        <thead>
-            <tr>
-                <th>Time</th>
-                <th>Location</th>
-                <th>Magnitude</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-    <div class="pagination">
-        <button id="prevPage">Previous</button>
-        <button id="nextPage">Next</button>
-        <span id="pageInfo"></span>
+    <div class="container">
+        <h1 class="mt-4">USGS Earthquake Data</h1>
+        <div id="table-container" class="mt-4">
+            <div class="d-flex justify-content-between">
+                <span id="record-count"></span>
+                <div>
+                    <label for="rows-per-page">Rows per page:</label>
+                    <select id="rows-per-page" class="form-control d-inline-block w-auto">
+                        <option value="5">5</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+            <table class="table table-striped mt-2">
+                <thead>
+                    <tr>
+                        <th>Magnitude</th>
+                        <th>Location</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="earthquake-table-body">
+                    <!-- Earthquake data will be inserted here -->
+                </tbody>
+            </table>
+            <div id="pagination" class="d-flex justify-content-center">
+                <!-- Pagination will be inserted here -->
+            </div>
+        </div>
+        <div id="map"></div>
     </div>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <div id="status-bar">Waiting for updates...</div>
+
+    <div class="modal fade" id="earthquake-modal" tabindex="-1" role="dialog" aria-labelledby="earthquakeModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="earthquakeModalLabel">Earthquake Details</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="modal-details"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const map = L.map('map').setView([37.7749, -122.4194], 5); // Initial view set to San Francisco
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+        let map;
+        let markers = [];
+        let earthquakeData = [];
+        let currentPage = 1;
+        let rowsPerPage = 5;
 
-            const statusBar = document.getElementById('statusBar');
-            const tableBody = document.getElementById('earthquakeTable').getElementsByTagName('tbody')[0];
-            const prevPageButton = document.getElementById('prevPage');
-            const nextPageButton = document.getElementById('nextPage');
-            const pageInfo = document.getElementById('pageInfo');
-            let currentPage = 1;
-            const rowsPerPage = 20;
-            let earthquakes = [];
-
-            map.on('mousemove', function (e) {
-                statusBar.textContent = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 20.0, lng: 0.0 },
+                zoom: 2
             });
 
-            function fetchEarthquakes() {
-                statusBar.textContent = "Status: Fetching earthquake data...";
-                fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
-                    .then(response => response.json())
-                    .then(data => {
-                        earthquakes = data.features;
-                        updateTable();
-                        updateMap();
-                        statusBar.textContent = "Status: Data fetched successfully";
-                    })
-                    .catch(error => {
-                        console.error("Error fetching earthquake data:", error);
-                        statusBar.textContent = "Status: Error fetching data";
-                    });
-            }
+            map.addListener("mousemove", (e) => {
+                document.getElementById("status-bar").innerText = `Latitude: ${e.latLng.lat().toFixed(4)}, Longitude: ${e.latLng.lng().toFixed(4)}`;
+            });
 
-            function updateTable() {
-                tableBody.innerHTML = '';
-                const start = (currentPage - 1) * rowsPerPage;
-                const end = Math.min(start + rowsPerPage, earthquakes.length);
+            fetchEarthquakeData();
+            setInterval(fetchEarthquakeData, 300000); // 5 minutes interval
+        }
 
-                for (let i = start; i < end; i++) {
-                    const quake = earthquakes[i];
-                    const row = tableBody.insertRow();
-                    row.insertCell(0).textContent = new Date(quake.properties.time).toLocaleString();
-                    row.insertCell(1).textContent = quake.properties.place;
-                    row.insertCell(2).textContent = quake.properties.mag;
-                    const detailsCell = row.insertCell(3);
-                    const detailsButton = document.createElement('button');
-                    detailsButton.textContent = 'Details';
-                    detailsButton.onclick = () => alert(JSON.stringify(quake.properties, null, 2));
-                    detailsCell.appendChild(detailsButton);
-                }
+        function fetchEarthquakeData() {
+            $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
+                earthquakeData = data.features;
+                updateTable();
+                updateMap();
+                document.getElementById("status-bar").innerText = "Update completed";
+            });
+        }
 
-                pageInfo.textContent = `Page ${currentPage} of ${Math.ceil(earthquakes.length / rowsPerPage)}`;
-            }
+        function updateMap() {
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
 
-            function updateMap() {
-                earthquakes.forEach(quake => {
-                    const [lng, lat] = quake.geometry.coordinates;
-                    const marker = L.marker([lat, lng]).addTo(map);
-                    marker.bindPopup(`<b>${quake.properties.place}</b><br>Magnitude: ${quake.properties.mag}`);
+            earthquakeData.forEach(feature => {
+                const coords = feature.geometry.coordinates;
+                const latLng = { lat: coords[1], lng: coords[0] };
+                const marker = new google.maps.Marker({
+                    position: latLng,
+                    map: map
                 });
+                marker.addListener('click', function() {
+                    showModal(feature.properties);
+                });
+                markers.push(marker);
+            });
+        }
+
+        function showModal(properties) {
+            document.getElementById("modal-details").innerText = `
+                Magnitude: ${properties.mag}
+                Location: ${properties.place}
+                Time: ${new Date(properties.time)}
+            `;
+            $('#earthquake-modal').modal('show');
+        }
+
+        function updateTable() {
+            const tableBody = document.getElementById("earthquake-table-body");
+            tableBody.innerHTML = '';
+
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginatedData = earthquakeData.slice(start, end);
+
+            paginatedData.forEach(feature => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${feature.properties.mag}</td>
+                    <td>${feature.properties.place}</td>
+                    <td>${new Date(feature.properties.time).toLocaleString()}</td>
+                `;
+                row.addEventListener('click', function() {
+                    showModal(feature.properties);
+                });
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById("record-count").innerText = `Total Records: ${earthquakeData.length}, Page: ${currentPage}`;
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const pagination = document.getElementById("pagination");
+            pagination.innerHTML = '';
+
+            const pageCount = Math.ceil(earthquakeData.length / rowsPerPage);
+            for (let i = 1; i <= pageCount; i++) {
+                const pageItem = document.createElement("button");
+                pageItem.className = 'btn btn-link';
+                pageItem.innerText = i;
+                if (i === currentPage) {
+                    pageItem.classList.add('active');
+                }
+                pageItem.addEventListener('click', function() {
+                    currentPage = i;
+                    updateTable();
+                });
+                pagination.appendChild(pageItem);
             }
+        }
 
-            prevPageButton.addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    updateTable();
-                }
-            });
-
-            nextPageButton.addEventListener('click', () => {
-                if (currentPage * rowsPerPage < earthquakes.length) {
-                    currentPage++;
-                    updateTable();
-                }
-            });
-
-            fetchEarthquakes();
-            setInterval(fetchEarthquakes, 300000); // Fetch data every 5 minutes
+        document.getElementById("rows-per-page").addEventListener('change', function() {
+            rowsPerPage = parseInt(this.value);
+            currentPage = 1;
+            updateTable();
         });
     </script>
 </body>
