@@ -76,21 +76,10 @@
         function fetchEarthquakeData() {
             $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
                 earthquakeData = data.features;
-                saveDataToFile(earthquakeData);
                 updateMarkers();
                 updateTable();
                 $('#statusBar').text('Status: Data Updated');
             });
-        }
-
-        function saveDataToFile(data) {
-            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'earthquake_data.json';
-            a.click();
-            URL.revokeObjectURL(url);
         }
 
         function updateMarkers() {
