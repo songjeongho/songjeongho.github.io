@@ -2,149 +2,120 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earthquake Info</title>
+    <title>Earthquake Information</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            overflow: hidden;
-        }
-        #map { height: 50%; width: 100%; }
-        #statusBar { position: fixed; bottom: 0; left: 0; width: 100%; background: #f8f8f8; padding: 10px; text-align: center; }
-        #zoomInButton, #returnButton { position: fixed; top: 10px; right: 10px; z-index: 1000; }
-        #tableContainer { height: 50%; overflow: auto; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        #map { height: 500px; margin-bottom: 10px; }
+        #statusBar { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; color: #fff; padding: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
-        #pagination { margin: 10px 0; text-align: center; }
-        select, button { padding: 5px; margin: 5px; }
+        .pagination { margin-top: 10px; text-align: center; }
+        .pagination button { margin: 0 5px; padding: 5px 10px; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="statusBar">Status: Ready</div>
-    <div id="tableContainer"></div>
-    <button id="zoomInButton">Zoom In</button>
-    <button id="returnButton" style="display: none;">Return</button>
+    <table id="earthquakeTable">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Magnitude</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <div class="pagination">
+        <button id="prevPage">Previous</button>
+        <button id="nextPage">Next</button>
+        <span id="pageInfo"></span>
+    </div>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        let map;
-        let markers = [];
-        let selectedMarker = null;
-        let earthquakeData = [];
-        let currentPage = 1;
-        let pageSize = 5;
+        document.addEventListener("DOMContentLoaded", () => {
+            const map = L.map('map').setView([37.7749, -122.4194], 5); // Initial view set to San Francisco
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
 
-        $(document).ready(function() {
-            initMap();
-            fetchEarthquakeData();
-            setInterval(fetchEarthquakeData, 300000); // 5 minutes
+            const statusBar = document.getElementById('statusBar');
+            const tableBody = document.getElementById('earthquakeTable').getElementsByTagName('tbody')[0];
+            const prevPageButton = document.getElementById('prevPage');
+            const nextPageButton = document.getElementById('nextPage');
+            const pageInfo = document.getElementById('pageInfo');
+            let currentPage = 1;
+            const rowsPerPage = 20;
+            let earthquakes = [];
 
-            $('#zoomInButton').click(function() {
-                if (selectedMarker) {
-                    map.setView(selectedMarker.getLatLng(), 10);
-                    $('#zoomInButton').hide();
-                    $('#returnButton').show();
+            map.on('mousemove', function (e) {
+                statusBar.textContent = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
+            });
+
+            function fetchEarthquakes() {
+                statusBar.textContent = "Status: Fetching earthquake data...";
+                fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        earthquakes = data.features;
+                        updateTable();
+                        updateMap();
+                        statusBar.textContent = "Status: Data fetched successfully";
+                    })
+                    .catch(error => {
+                        console.error("Error fetching earthquake data:", error);
+                        statusBar.textContent = "Status: Error fetching data";
+                    });
+            }
+
+            function updateTable() {
+                tableBody.innerHTML = '';
+                const start = (currentPage - 1) * rowsPerPage;
+                const end = Math.min(start + rowsPerPage, earthquakes.length);
+
+                for (let i = start; i < end; i++) {
+                    const quake = earthquakes[i];
+                    const row = tableBody.insertRow();
+                    row.insertCell(0).textContent = new Date(quake.properties.time).toLocaleString();
+                    row.insertCell(1).textContent = quake.properties.place;
+                    row.insertCell(2).textContent = quake.properties.mag;
+                    const detailsCell = row.insertCell(3);
+                    const detailsButton = document.createElement('button');
+                    detailsButton.textContent = 'Details';
+                    detailsButton.onclick = () => alert(JSON.stringify(quake.properties, null, 2));
+                    detailsCell.appendChild(detailsButton);
+                }
+
+                pageInfo.textContent = `Page ${currentPage} of ${Math.ceil(earthquakes.length / rowsPerPage)}`;
+            }
+
+            function updateMap() {
+                earthquakes.forEach(quake => {
+                    const [lng, lat] = quake.geometry.coordinates;
+                    const marker = L.marker([lat, lng]).addTo(map);
+                    marker.bindPopup(`<b>${quake.properties.place}</b><br>Magnitude: ${quake.properties.mag}`);
+                });
+            }
+
+            prevPageButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateTable();
                 }
             });
 
-            $('#returnButton').click(function() {
-                map.setView([20, 0], 2);
-                $('#returnButton').hide();
-                $('#zoomInButton').show();
+            nextPageButton.addEventListener('click', () => {
+                if (currentPage * rowsPerPage < earthquakes.length) {
+                    currentPage++;
+                    updateTable();
+                }
             });
+
+            fetchEarthquakes();
+            setInterval(fetchEarthquakes, 300000); // Fetch data every 5 minutes
         });
-
-        function initMap() {
-            map = L.map('map').setView([20, 0], 2);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18
-            }).addTo(map);
-
-            L.Control.geocoder().addTo(map);
-
-            map.on('mousemove', function(e) {
-                $('#statusBar').text(`Lat: ${e.latlng.lat.toFixed(2)}, Lng: ${e.latlng.lng.toFixed(2)}`);
-            });
-        }
-
-        function fetchEarthquakeData() {
-            $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
-                earthquakeData = data.features;
-                updateMarkers();
-                updateTable();
-                $('#statusBar').text('Status: Data Updated');
-            });
-        }
-
-        function updateMarkers() {
-            markers.forEach(marker => map.removeLayer(marker));
-            markers = [];
-
-            earthquakeData.forEach(quake => {
-                let coords = quake.geometry.coordinates;
-                let marker = L.marker([coords[1], coords[0]]);
-                marker.addTo(map);
-                marker.on('click', function() {
-                    if (selectedMarker) selectedMarker.setIcon(new L.Icon.Default());
-                    selectedMarker = marker;
-                    marker.setIcon(new L.Icon({ iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png', iconSize: [38, 95] }));
-                    showEarthquakeDetails(quake);
-                });
-                markers.push(marker);
-            });
-        }
-
-        function showEarthquakeDetails(quake) {
-            let detailsHtml = `<p>Magnitude: ${quake.properties.mag}</p>
-                               <p>Location: ${quake.properties.place}</p>
-                               <p>Time: ${new Date(quake.properties.time).toLocaleString()}</p>`;
-            $('#statusBar').html(detailsHtml);
-        }
-
-        function updateTable() {
-            let totalPages = Math.ceil(earthquakeData.length / pageSize);
-            let tableHtml = '<table><thead><tr><th>Time</th><th>Magnitude</th><th>Location</th></tr></thead><tbody>';
-            let start = (currentPage - 1) * pageSize;
-            let end = Math.min(start + pageSize, earthquakeData.length);
-            for (let i = start; i < end; i++) {
-                let quake = earthquakeData[i];
-                let time = new Date(quake.properties.time).toLocaleString();
-                let mag = quake.properties.mag;
-                let place = quake.properties.place;
-                tableHtml += `<tr data-index="${i}"><td>${time}</td><td>${mag}</td><td>${place}</td></tr>`;
-            }
-            tableHtml += '</tbody></table>';
-            tableHtml += `<div id="pagination">Total: ${earthquakeData.length} items<br>`;
-            tableHtml += 'Page Size: <select id="pageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>';
-            tableHtml += `<br>Page: <select id="currentPage">`;
-            for (let i = 1; i <= totalPages; i++) {
-                tableHtml += `<option value="${i}">${i}</option>`;
-            }
-            tableHtml += `</select> / ${totalPages}</div>`;
-            $('#tableContainer').html(tableHtml);
-
-            $('#tableContainer tr').click(function() {
-                let index = $(this).data('index');
-                showEarthquakeDetails(earthquakeData[index]);
-            });
-
-            $('#pageSize').val(pageSize).change(function() {
-                pageSize = parseInt($(this).val());
-                currentPage = 1;
-                updateTable();
-            });
-
-            $('#currentPage').val(currentPage).change(function() {
-                currentPage = parseInt($(this).val());
-                updateTable();
-            });
-        }
     </script>
 </body>
 </html>
