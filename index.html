@@ -1,1 +1,236 @@
-Hello World !!
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthquake Information</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-search/dist/leaflet-search.min.css" />
+    <style>
+        #map {
+            height: 900px;
+            width: 100%;
+        }
+
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #ccc;
+            text-align: center;
+            padding: 5px;
+        }
+
+        #info-table {
+            margin-top: 10px;
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+            font-size: 0.875rem; /* Smaller font size */
+        }
+
+        th, td {
+            padding: 4px 8px; /* Smaller padding */
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:nth-child(odd) {
+            background-color: #e9e9e9;
+        }
+
+        tr:hover {
+            background-color: #d1e0e0;
+        }
+
+        #details {
+            position: absolute;
+            background-color: white;
+            border: 2px solid #ccc;
+            padding: 10px;
+            display: none;
+            z-index: 1000;
+        }
+
+        #pagination-controls {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        #items-per-page {
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-search/dist/leaflet-search.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</head>
+<body class="container-fluid">
+    <div id="map"></div>
+    <div id="status-bar"></div>
+    <div id="info-table" class="table-responsive"></div>
+    <div id="pagination-controls"></div>
+    <div id="items-per-page">
+        Items per page:
+        <select id="itemsPerPageSelect" class="form-control d-inline w-auto">
+            <option value="5">5</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
+    </div>
+    <button id="saveExcel" class="btn btn-primary mt-2">Save as Excel</button>
+    <div id="details" class="card p-2"></div>
+
+    <script>
+        let map, markers = [];
+        let currentZoomLevel = 5;
+        let earthquakeData = [];
+        let currentPage = 1;
+        let itemsPerPage = 5;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeMap();
+            initializeStatusBar();
+            setInterval(fetchAndUpdateEarthquakeData, 300000); // 5 minutes
+            fetchAndUpdateEarthquakeData();
+
+            document.getElementById('itemsPerPageSelect').addEventListener('change', (e) => {
+                itemsPerPage = parseInt(e.target.value, 10);
+                currentPage = 1;
+                displayPage();
+            });
+
+            document.getElementById('saveExcel').addEventListener('click', saveAsExcel);
+            document.addEventListener('click', (event) => {
+                const details = document.getElementById('details');
+                if (details.style.display === 'block' && !details.contains(event.target)) {
+                    details.style.display = 'none';
+                }
+            });
+        });
+
+        async function fetchAndUpdateEarthquakeData() {
+            earthquakeData = await fetchEarthquakeData();
+            earthquakeData.sort((a, b) => new Date(b.time) - new Date(a.time)); // Sort by most recent
+            displayPage();
+            updateStatusBar('Data updated successfully.');
+        }
+
+        function initializeMap() {
+            map = new L.Map('map').setView([37.7749, -122.4194], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            map.on('mousemove', updateLatLngInStatusBar);
+
+            const searchControl = new L.Control.Search({
+                layer: new L.LayerGroup(),
+                initial: false,
+                zoom: 12,
+                marker: false
+            });
+
+            searchControl.on('search:locationfound', (e) => {
+                map.setView(e.latlng, 12);
+            });
+
+            map.addControl(searchControl);
+        }
+
+        function updateLatLngInStatusBar(e) {
+            const { lat, lng } = e.latlng;
+            document.getElementById('status-bar').textContent = `Lat: ${lat.toFixed(2)}, Lng: ${lng.toFixed(2)}`;
+        }
+
+        async function fetchEarthquakeData() {
+            const response = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson');
+            const data = await response.json();
+            return data.features.map(feature => ({
+                id: feature.id,
+                place: feature.properties.place,
+                magnitude: feature.properties.mag,
+                time: new Date(feature.properties.time).toLocaleString(),
+                latitude: feature.geometry.coordinates[1],
+                longitude: feature.geometry.coordinates[0]
+            }));
+        }
+
+        function displayPage() {
+            const totalPages = Math.ceil(earthquakeData.length / itemsPerPage);
+            const pageData = earthquakeData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+            populateTable(pageData);
+            setupPaginationControls(totalPages);
+        }
+
+        function populateTable(data) {
+            const tableContainer = document.getElementById('info-table');
+            const table = document.createElement('table');
+            table.classList.add('table', 'table-sm');
+            const header = table.createTHead();
+            const headerRow = header.insertRow();
+            
+            ['Place', 'Magnitude', 'Time'].forEach(text => {
+                const cell = document.createElement('th');
+                cell.textContent = text;
+                headerRow.appendChild(cell);
+            });
+
+            const tbody = table.createTBody();
+            data.forEach(eq => {
+                const row = tbody.insertRow();
+                row.insertCell().textContent = eq.place;
+                row.insertCell().textContent = eq.magnitude;
+                row.insertCell().textContent = eq.time;
+            });
+
+            const totalRow = table.insertRow();
+            const cell = totalRow.insertCell();
+            cell.colSpan = 3;
+            cell.textContent = `Total items: ${earthquakeData.length}`;
+
+            tableContainer.innerHTML = '';
+            tableContainer.appendChild(table);
+            addMarkers(data);
+        }
+
+        function showEarthquakeDetails(eq) {
+            const details = document.getElementById('details');
+            details.innerHTML = `
+                <h5>Earthquake Details</h5>
+                <p><strong>Place:</strong> ${eq.place}</p>
+                <p><strong>Magnitude:</strong> ${eq.magnitude}</p>
+                <p><strong>Time:</strong> ${eq.time}</p>
+                <p><strong>Latitude:</strong> ${eq.latitude}</p>
+                <p><strong>Longitude:</strong> ${eq.longitude}</p>
+                <button id="zoom-in" class="btn btn-sm btn-primary">Zoom In</button>
+                <button id="return" class="btn btn-sm btn-secondary" style="display:none;">Return</button>
+            `;
+            details.style.display = 'block';
+            const markerLatLng = L.latlng(eq.latitude, eq.longitude);
+            const markerPoint = map.latlngToContainerPoint(markerLatLng);
+            details.style.top = `${markerPoint.y - details.offsetHeight}px`;
+            details.style.left = `${markerPoint.x - details.offsetWidth / 2}px`;
+
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                currentZoomLevel = 10;
+                map.setView([eq.latitude, eq.longitude], currentZoomLevel);
+                document.getElementById('zoom-in').style.display = 'none';
+                document.getElementById('return').style.display = 'block';
