@@ -6,10 +6,21 @@
     <title>Earthquake Info</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        #map { height: 600px; }
-        #statusBar { position: fixed; bottom: 0; left: 0; width: 100%; background: #f8f8f8; padding: 10px; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #map { height: 50%; width: 100%; }
+        #statusBar { position: fixed; bottom: 0; left: 0; width: 100%; background: #f8f8f8; padding: 10px; text-align: center; }
         #zoomInButton, #returnButton { position: fixed; top: 10px; right: 10px; z-index: 1000; }
-        #tableContainer { margin-top: 620px; }
+        #tableContainer { height: 50%; overflow: auto; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        #pagination { margin: 10px 0; text-align: center; }
+        select, button { padding: 5px; margin: 5px; }
     </style>
 </head>
 <body>
@@ -21,7 +32,6 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
     <script>
         let map;
         let markers = [];
@@ -121,9 +131,9 @@
                 tableHtml += `<tr data-index="${i}"><td>${time}</td><td>${mag}</td><td>${place}</td></tr>`;
             }
             tableHtml += '</tbody></table>';
-            tableHtml += `<div>Total: ${earthquakeData.length} items</div>`;
-            tableHtml += '<div>Page Size: <select id="pageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></div>';
-            tableHtml += `<div>Page: <select id="currentPage">`;
+            tableHtml += `<div id="pagination">Total: ${earthquakeData.length} items<br>`;
+            tableHtml += 'Page Size: <select id="pageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>';
+            tableHtml += `<br>Page: <select id="currentPage">`;
             for (let i = 1; i <= totalPages; i++) {
                 tableHtml += `<option value="${i}">${i}</option>`;
             }
@@ -148,4 +158,4 @@
         }
     </script>
 </body>
-</html> 
+</html>
