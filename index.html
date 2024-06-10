@@ -21,11 +21,14 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
     <script>
         let map;
         let markers = [];
         let selectedMarker = null;
         let earthquakeData = [];
+        let currentPage = 1;
+        let pageSize = 5;
 
         $(document).ready(function() {
             initMap();
@@ -33,9 +36,11 @@
             setInterval(fetchEarthquakeData, 300000); // 5 minutes
 
             $('#zoomInButton').click(function() {
-                map.setView(selectedMarker.getLatLng(), 10);
-                $('#zoomInButton').hide();
-                $('#returnButton').show();
+                if (selectedMarker) {
+                    map.setView(selectedMarker.getLatLng(), 10);
+                    $('#zoomInButton').hide();
+                    $('#returnButton').show();
+                }
             });
 
             $('#returnButton').click(function() {
@@ -61,10 +66,21 @@
         function fetchEarthquakeData() {
             $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
                 earthquakeData = data.features;
+                saveDataToFile(earthquakeData);
                 updateMarkers();
                 updateTable();
                 $('#statusBar').text('Status: Data Updated');
             });
+        }
+
+        function saveDataToFile(data) {
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'earthquake_data.json';
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         function updateMarkers() {
@@ -86,7 +102,6 @@
         }
 
         function showEarthquakeDetails(quake) {
-            // Implement details display logic
             let detailsHtml = `<p>Magnitude: ${quake.properties.mag}</p>
                                <p>Location: ${quake.properties.place}</p>
                                <p>Time: ${new Date(quake.properties.time).toLocaleString()}</p>`;
@@ -94,19 +109,41 @@
         }
 
         function updateTable() {
+            let totalPages = Math.ceil(earthquakeData.length / pageSize);
             let tableHtml = '<table><thead><tr><th>Time</th><th>Magnitude</th><th>Location</th></tr></thead><tbody>';
-            earthquakeData.forEach((quake, index) => {
+            let start = (currentPage - 1) * pageSize;
+            let end = Math.min(start + pageSize, earthquakeData.length);
+            for (let i = start; i < end; i++) {
+                let quake = earthquakeData[i];
                 let time = new Date(quake.properties.time).toLocaleString();
                 let mag = quake.properties.mag;
                 let place = quake.properties.place;
-                tableHtml += `<tr data-index="${index}"><td>${time}</td><td>${mag}</td><td>${place}</td></tr>`;
-            });
+                tableHtml += `<tr data-index="${i}"><td>${time}</td><td>${mag}</td><td>${place}</td></tr>`;
+            }
             tableHtml += '</tbody></table>';
+            tableHtml += `<div>Total: ${earthquakeData.length} items</div>`;
+            tableHtml += '<div>Page Size: <select id="pageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></div>';
+            tableHtml += `<div>Page: <select id="currentPage">`;
+            for (let i = 1; i <= totalPages; i++) {
+                tableHtml += `<option value="${i}">${i}</option>`;
+            }
+            tableHtml += `</select> / ${totalPages}</div>`;
             $('#tableContainer').html(tableHtml);
 
             $('#tableContainer tr').click(function() {
                 let index = $(this).data('index');
                 showEarthquakeDetails(earthquakeData[index]);
+            });
+
+            $('#pageSize').val(pageSize).change(function() {
+                pageSize = parseInt($(this).val());
+                currentPage = 1;
+                updateTable();
+            });
+
+            $('#currentPage').val(currentPage).change(function() {
+                currentPage = parseInt($(this).val());
+                updateTable();
             });
         }
     </script>
