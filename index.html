@@ -1,80 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <title>Earthquake Map</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Mapbox GL JS -->
-    <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
-    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthquake Information</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css" />
     <style>
-        body { margin: 0; padding: 0; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        #status-bar {
+            height: 30px;
+            background: #f4f4f4;
+            border-top: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+        }
+        #table-container {
+            margin-top: 20px;
+        }
+        .dt-buttons {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <script>
-        // Mapbox Access Token
-        mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
 
-        // Initialize the map
-        const map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/streets-v11',
-            center: [0, 0], // Starting position [lng, lat]
-            zoom: 2 // Starting zoom level
+<div id="map"></div>
+<div id="status-bar">Status: Ready</div>
+<div id="table-container">
+    <table id="earthquake-table" class="display">
+        <thead>
+            <tr>
+                <th>Place</th>
+                <th>Magnitude</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script>
+    const map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+    }).addTo(map);
+
+    const statusBar = document.getElementById('status-bar');
+
+    map.on('mousemove', function (e) {
+        statusBar.textContent = `Lat: ${e.latlng.lat.toFixed(2)}, Lng: ${e.latlng.lng.toFixed(2)}`;
+    });
+
+    const earthquakeMarkers = [];
+
+    function fetchEarthquakeData() {
+        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson')
+            .then(response => response.json())
+            .then(data => {
+                updateMapAndTable(data.features);
+                statusBar.textContent = 'Status: Data updated';
+            })
+            .catch(error => {
+                statusBar.textContent = `Status: Error fetching data - ${error}`;
+            });
+    }
+
+    function updateMapAndTable(earthquakes) {
+        earthquakeMarkers.forEach(marker => map.removeLayer(marker));
+        earthquakeMarkers.length = 0;
+
+        const tableBody = $('#earthquake-table tbody');
+        tableBody.empty();
+
+        earthquakes.forEach((earthquake, index) => {
+            const coords = earthquake.geometry.coordinates;
+            const place = earthquake.properties.place;
+            const mag = earthquake.properties.mag;
+            const time = new Date(earthquake.properties.time).toLocaleString();
+
+            const marker = L.marker([coords[1], coords[0]]).addTo(map)
+                .bindPopup(`<b>Place:</b> ${place}<br><b>Magnitude:</b> ${mag}<br><b>Time:</b> ${time}`)
+                .on('click', () => showDetailedInfo(marker));
+
+            earthquakeMarkers.push(marker);
+
+            const row = `<tr data-index="${index}">
+                            <td>${place}</td>
+                            <td>${mag}</td>
+                            <td>${time}</td>
+                        </tr>`;
+            tableBody.append(row);
         });
 
-        // Fetch earthquake data from USGS API
-        async function fetchEarthquakeData() {
-            const url = "https://earthquake.usgs.gov/fdsnws/event/1/query";
-            const params = {
-                format: "geojson",
-                starttime: "2024-06-01", // Start date
-                endtime: "2024-06-11",   // End date
-                minmagnitude: 5          // Minimum magnitude
-            };
+        $('#earthquake-table').DataTable({
+            destroy: true,
+            paging: true,
+            pageLength: 10,
+            lengthMenu: [5, 10, 20, 50, 100],
+        });
 
-            const queryString = new URLSearchParams(params).toString();
-            const response = await fetch(`${url}?${queryString}`);
-            const data = await response.json();
-            return data.features;
-        }
+        $('#earthquake-table tbody').on('click', 'tr', function () {
+            const index = $(this).data('index');
+            const marker = earthquakeMarkers[index];
+            marker.openPopup();
+            showDetailedInfo(marker);
+        });
+    }
 
-        // Add markers to the map
-        async function addMarkers() {
-            const earthquakes = await fetchEarthquakeData();
+    function showDetailedInfo(marker) {
+        const zoomButton = document.createElement('button');
+        zoomButton.textContent = 'Zoom In';
+        zoomButton.addEventListener('click', () => {
+            map.setView(marker.getLatLng(), 10);
+            zoomButton.style.display = 'none';
+            returnButton.style.display = 'block';
+        });
 
-            earthquakes.forEach(earthquake => {
-                const coordinates = earthquake.geometry.coordinates;
-                const magnitude = earthquake.properties.mag;
-                const place = earthquake.properties.place;
+        const returnButton = document.createElement('button');
+        returnButton.textContent = 'Return';
+        returnButton.style.display = 'none';
+        returnButton.addEventListener('click', () => {
+            map.setView([0, 0], 2);
+            zoomButton.style.display = 'block';
+            returnButton.style.display = 'none';
+        });
 
-                // Create a DOM element for the marker
-                const el = document.createElement('div');
-                el.className = 'marker';
-                el.style.backgroundColor = 'red';
-                el.style.width = '20px';
-                el.style.height = '20px';
-                el.style.borderRadius = '50%';
-                el.style.display = 'flex';
-                el.style.justifyContent = 'center';
-                el.style.alignItems = 'center';
-                el.style.color = 'white';
-                el.innerHTML = magnitude.toFixed(1);
+        const popupContent = marker.getPopup().getContent();
+        marker.bindPopup(`${popupContent}<br>`, {
+            closeButton: false
+        }).openPopup().getPopup().setContent(`${popupContent}<br>`).append(zoomButton).append(returnButton);
+    }
 
-                // Add the marker to the map
-                new mapboxgl.Marker(el)
-                    .setLngLat([coordinates[0], coordinates[1]])
-                    .setPopup(new mapboxgl.Popup({ offset: 25 }) // add popups
-                        .setHTML(`<h3>${place}</h3><p>Magnitude: ${magnitude}</p>`))
-                    .addTo(map);
-            });
-        }
+    setInterval(fetchEarthquakeData, 300000); // 5 minutes
+    fetchEarthquakeData();
+</script>
 
-        // Call the function to add markers to the map
-        addMarkers();
-    </script>
 </body>
 </html>
