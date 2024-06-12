@@ -1,128 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Earthquake Map</title>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/simplePagination.css" />
+    <title>Earthquake Information</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <style>
-        #map { height: 600px; }
-        #statusbar { padding: 5px; background: #f2f2f2; border: 1px solid #ccc; }
-        #table-container { margin-top: 20px; }
-        #earthquake-table { width: 100%; border-collapse: collapse; }
-        #earthquake-table th, #earthquake-table td { border: 1px solid #ccc; padding: 5px; text-align: left; }
-        .pagination { margin-top: 10px; }
+        #map { height: 500px; }
+        #status-bar { position: fixed; bottom: 0; width: 100%; background: #f8f9fa; padding: 10px; text-align: center; border-top: 1px solid #ddd; }
     </style>
 </head>
 <body>
+    <div class="container mt-4">
+        <h1 class="text-center">Earthquake Information</h1>
+        <div id="status-bar">Status: Ready</div>
+        <div id="map"></div>
+        <div id="earthquakeTable" class="mt-4"></div>
+    </div>
 
-<div id="map"></div>
-<div id="statusbar">Hover over the map to see the coordinates.</div>
-<div id="table-container">
-    <div id="table-info"></div>
-    <table id="earthquake-table">
-        <thead>
-            <tr>
-                <th>Location</th>
-                <th>Magnitude</th>
-                <th>Time</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-    <div class="pagination"></div>
-</div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/dataTables.bootstrap4.min.js"></script>
+    <script>
+        const statusBar = document.getElementById('status-bar');
+        const map = L.map('map').setView([37.7749, -122.4194], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(map);
 
-<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/simplePagination.js/1.6/jquery.simplePagination.min.js"></script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-    const map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
+        let earthquakeMarkers = [];
 
-    let earthquakeMarkers = [];
-    let earthquakes = [];
-    const pageSize = 10;
+        const updateStatus = (message) => {
+            statusBar.textContent = message;
+        };
 
-    function fetchEarthquakeData() {
-        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
-            .then(response => response.json())
-            .then(data => {
-                earthquakes = data.features;
-                updateMap();
-                updateTable();
+        const fetchEarthquakeData = () => {
+            updateStatus('Fetching earthquake data...');
+            $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
+                updateStatus('Data fetched successfully');
+                updateMap(data.features);
+                updateTable(data.features);
+            }).fail(function() {
+                updateStatus('Failed to fetch data');
             });
-    }
+        };
 
-    function updateMap() {
-        earthquakeMarkers.forEach(marker => map.removeLayer(marker));
-        earthquakeMarkers = [];
+        const updateMap = (earthquakes) => {
+            earthquakeMarkers.forEach(marker => map.removeLayer(marker));
+            earthquakeMarkers = [];
+            earthquakes.forEach(quake => {
+                const coords = quake.geometry.coordinates;
+                const latLng = [coords[1], coords[0]];
+                const marker = L.marker(latLng).addTo(map);
+                marker.bindPopup(`<strong>Magnitude:</strong> ${quake.properties.mag}<br><strong>Location:</strong> ${quake.properties.place}`);
+                earthquakeMarkers.push(marker);
+            });
+        };
 
-        earthquakes.forEach(earthquake => {
-            const coords = earthquake.geometry.coordinates;
-            const magnitude = earthquake.properties.mag;
-            const place = earthquake.properties.place;
-            const time = new Date(earthquake.properties.time).toLocaleString();
+        const updateTable = (earthquakes) => {
+            const tableDiv = $('#earthquakeTable');
+            tableDiv.empty();
+            let table = '<table id="quakeTable" class="table table-striped table-bordered"><thead><tr><th>Time</th><th>Magnitude</th><th>Location</th></tr></thead><tbody>';
+            earthquakes.forEach(quake => {
+                const time = new Date(quake.properties.time).toLocaleString();
+                const mag = quake.properties.mag;
+                const place = quake.properties.place;
+                table += `<tr data-lat="${quake.geometry.coordinates[1]}" data-lng="${quake.geometry.coordinates[0]}" data-mag="${mag}" data-place="${place}"><td>${time}</td><td>${mag}</td><td>${place}</td></tr>`;
+            });
+            table += '</tbody></table>';
+            tableDiv.append(table);
+            $('#quakeTable').DataTable({
+                "pageLength": 5,
+                "lengthMenu": [5, 20, 50, 100],
+                "pagingType": "full_numbers"
+            });
 
-            const marker = L.marker([coords[1], coords[0]]).addTo(map);
-            marker.bindPopup(`<b>${place}</b><br>Magnitude: ${magnitude}<br>Time: ${time}`);
-            earthquakeMarkers.push(marker);
-        });
-    }
+            $('#quakeTable tbody').on('click', 'tr', function() {
+                const lat = $(this).data('lat');
+                const lng = $(this).data('lng');
+                const mag = $(this).data('mag');
+                const place = $(this).data('place');
+                const latLng = [lat, lng];
+                const popupContent = `<strong>Magnitude:</strong> ${mag}<br><strong>Location:</strong> ${place}`;
+                L.popup()
+                    .setLatLng(latLng)
+                    .setContent(popupContent)
+                    .openOn(map);
+                map.setView(latLng, 8);
+            });
+        };
 
-    function updateTable() {
-        const $tbody = $('#earthquake-table tbody');
-        $tbody.empty();
-
-        const pageCount = Math.ceil(earthquakes.length / pageSize);
-        $('.pagination').pagination({
-            items: earthquakes.length,
-            itemsOnPage: pageSize,
-            cssStyle: 'light-theme',
-            onPageClick: (pageNumber) => {
-                const start = (pageNumber - 1) * pageSize;
-                const end = start + pageSize;
-                const pageData = earthquakes.slice(start, end);
-
-                $tbody.empty();
-                pageData.forEach(earthquake => {
-                    const magnitude = earthquake.properties.mag;
-                    const place = earthquake.properties.place;
-                    const time = new Date(earthquake.properties.time).toLocaleString();
-
-                    const $tr = $('<tr>').append(
-                        $('<td>').text(place),
-                        $('<td>').text(magnitude),
-                        $('<td>').text(time)
-                    );
-                    $tr.click(() => {
-                        const coords = earthquake.geometry.coordinates;
-                        map.setView([coords[1], coords[0]], 8);
-                        earthquakeMarkers.forEach(marker => {
-                            if (marker.getLatLng().lat === coords[1] && marker.getLatLng().lng === coords[0]) {
-                                marker.openPopup();
-                            }
-                        });
-                    });
-
-                    $tbody.append($tr);
-                });
-            }
+        map.on('mousemove', function(e) {
+            updateStatus(`Latitude: ${e.latlng.lat.toFixed(4)}, Longitude: ${e.latlng.lng.toFixed(4)}`);
         });
 
-        $('#table-info').text(`Total Earthquakes: ${earthquakes.length}`);
-    }
-
-    map.on('mousemove', function(e) {
-        $('#statusbar').text(`Latitude: ${e.latlng.lat.toFixed(4)}, Longitude: ${e.latlng.lng.toFixed(4)}`);
-    });
-
-    fetchEarthquakeData();
-    setInterval(fetchEarthquakeData, 300000); // 5 minutes interval
-</script>
-
+        setInterval(fetchEarthquakeData, 300000); // 5 minutes
+        fetchEarthquakeData();
+    </script>
 </body>
 </html>
