@@ -6,6 +6,7 @@
     <title>Earthquake Information</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-search/dist/leaflet-search.min.css">
     <style>
         #map { height: 500px; }
         #status-bar { position: fixed; bottom: 0; width: 100%; background: #f8f9fa; padding: 10px; text-align: center; border-top: 1px solid #ddd; }
@@ -25,6 +26,7 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.10.21/js/dataTables.bootstrap4.min.js"></script>
+    <script src="https://unpkg.com/leaflet-search/dist/leaflet-search.min.js"></script>
     <script>
         const statusBar = document.getElementById('status-bar');
         const map = L.map('map').setView([37.7749, -122.4194], 5);
@@ -33,6 +35,14 @@
         }).addTo(map);
 
         let earthquakeMarkers = [];
+        const markerLayer = L.layerGroup().addTo(map);
+        const searchControl = new L.Control.Search({
+            layer: markerLayer,
+            propertyName: 'title',
+            moveToLocation: function(latlng, title, map) {
+                map.setView(latlng, 8); // set the zoom level
+            }
+        }).addTo(map);
 
         const updateStatus = (message) => {
             statusBar.textContent = message;
@@ -50,15 +60,17 @@
         };
 
         const updateMap = (earthquakes) => {
-            earthquakeMarkers.forEach(marker => map.removeLayer(marker));
+            markerLayer.clearLayers();
             earthquakeMarkers = [];
             earthquakes.forEach(quake => {
                 const coords = quake.geometry.coordinates;
                 const latLng = [coords[1], coords[0]];
-                const marker = L.marker(latLng).addTo(map);
+                const marker = L.marker(latLng).addTo(markerLayer);
                 marker.bindPopup(`<strong>Magnitude:</strong> ${quake.properties.mag}<br><strong>Location:</strong> ${quake.properties.place}`);
+                marker.options.title = quake.properties.place;
                 earthquakeMarkers.push(marker);
             });
+            searchControl.indexSync();
         };
 
         const updateTable = (earthquakes) => {
