@@ -14,6 +14,7 @@
         .mapboxgl-popup-content { text-align: center; font-family: 'Open Sans', sans-serif; }
         .status-bar { position: fixed; bottom: 0; width: 100%; background-color: #333; color: white; text-align: center; padding: 10px; }
         .zoom-return { display: none; position: fixed; bottom: 50px; right: 50px; z-index: 1; }
+        .pagination { justify-content: center; }
     </style>
 </head>
 <body>
@@ -23,6 +24,15 @@
     <div class="status-bar" id="status-bar">Loading...</div>
     <div class="zoom-return" id="zoom-return">
         <button class="btn btn-primary">Return</button>
+    </div>
+    <div class="form-group">
+        <label for="rows-per-page">Rows per page:</label>
+        <select id="rows-per-page" class="form-control" style="width: auto; display: inline-block;">
+            <option value="5">5</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
     </div>
     <table class="table table-bordered" id="earthquake-table">
         <thead>
@@ -36,6 +46,12 @@
             <!-- Earthquake data will be inserted here -->
         </tbody>
     </table>
+    <nav>
+        <ul class="pagination" id="pagination">
+            <!-- Pagination buttons will be inserted here -->
+        </ul>
+    </nav>
+    <div>Displaying <span id="total-count"></span> results</div>
 </div>
 <div id='map'></div>
 
@@ -43,7 +59,7 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 <script>
-    mapboxgl.accessToken ='pk.eyJ1IjoiaGQ3MzA3aDEiLCJhIjoiY2x4YnB5OXdzMnZieDJpcXhva2JqOGE5MiJ9.tnktvNciVGN2XVDPFEwCLA';
+    mapboxgl.accessToken = 'pk.eyJ1IjoiaGQ3MzA3aDEiLCJhIjoiY2x4YnB5OXdzMnZieDJpcXhva2JqOGE5MiJ9.tnktvNciVGN2XVDPFEwCLA';
 
     const map = new mapboxgl.Map({
         container: 'map',
@@ -55,6 +71,8 @@
     const statusBar = document.getElementById('status-bar');
     const zoomReturnBtn = document.getElementById('zoom-return');
     let earthquakeData = [];
+    let currentPage = 1;
+    let rowsPerPage = 5;
 
     async function fetchEarthquakeData() {
         const response = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson');
@@ -68,13 +86,18 @@
     function updateTable() {
         const tableBody = document.getElementById('earthquake-table').querySelector('tbody');
         tableBody.innerHTML = '';
-        earthquakeData.forEach(earthquake => {
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const pageData = earthquakeData.slice(start, end);
+
+        pageData.forEach(earthquake => {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${earthquake.properties.place}</td>
                 <td>${earthquake.properties.mag}</td>
                 <td>${new Date(earthquake.properties.time).toLocaleString()}</td>
             `;
+            row.style.cursor = 'pointer';
             row.addEventListener('click', () => {
                 const coordinates = earthquake.geometry.coordinates;
                 map.flyTo({ center: [coordinates[0], coordinates[1]], zoom: 8 });
@@ -82,6 +105,9 @@
             });
             tableBody.appendChild(row);
         });
+
+        updatePagination();
+        document.getElementById('total-count').textContent = earthquakeData.length;
     }
 
     function updateMap() {
@@ -115,6 +141,34 @@
     zoomReturnBtn.addEventListener('click', () => {
         map.flyTo({ center: [-98.5795, 39.8283], zoom: 3 });
         zoomReturnBtn.style.display = 'none';
+    });
+
+    function updatePagination() {
+        const pagination = document.getElementById('pagination');
+        pagination.innerHTML = '';
+
+        const pageCount = Math.ceil(earthquakeData.length / rowsPerPage);
+        for (let i = 1; i <= pageCount; i++) {
+            const pageItem = document.createElement('li');
+            pageItem.className = 'page-item' + (i === currentPage ? ' active' : '');
+            const pageLink = document.createElement('a');
+            pageLink.className = 'page-link';
+            pageLink.href = '#';
+            pageLink.textContent = i;
+            pageLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                currentPage = i;
+                updateTable();
+            });
+            pageItem.appendChild(pageLink);
+            pagination.appendChild(pageItem);
+        }
+    }
+
+    document.getElementById('rows-per-page').addEventListener('change', (e) => {
+        rowsPerPage = parseInt(e.target.value);
+        currentPage = 1;
+        updateTable();
     });
 
     setInterval(fetchEarthquakeData, 300000);
