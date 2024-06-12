@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Mapbox GL JS 지진 정보 표시</title>
+    <title>Mapbox GL JS USGS 지진 정보 표시</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet" />
@@ -15,98 +15,77 @@
 <div id="map"></div>
 <script>
     // Mapbox 접근 토큰 설정
-    mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+    mapboxgl.accessToken = 'pk.eyJ1IjoiaGQ3MzA3aDEiLCJhIjoiY2x4YnB5OXdzMnZieDJpcXhva2JqOGE5MiJ9.tnktvNciVGN2XVDPFEwCLA';
 
     // Mapbox 지도 초기화
     const map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/streets-v11',
-        center: [127.024612, 37.532600], // 서울 기준 중심 좌표
-        zoom: 5
+        center: [-98.5795, 39.8283], // 미국 중심 좌표
+        zoom: 3
     });
 
-    // 지진 정보 GeoJSON 데이터
-    const earthquakeData = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {
-                    "magnitude": 5.2,
-                    "place": "서울"
-                },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [127.024612, 37.532600]
-                }
-            },
-            {
-                "type": "Feature",
-                "properties": {
-                    "magnitude": 4.8,
-                    "place": "부산"
-                },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [129.075642, 35.179554]
-                }
-            },
-            // 추가 지진 데이터 여기에 입력
-        ]
-    };
+    // USGS 지진 정보 API URL
+    const usgsEarthquakeApiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
 
-    // 지도에 지진 정보 레이어 추가
-    map.on('load', function () {
-        map.addSource('earthquakes', {
-            'type': 'geojson',
-            'data': earthquakeData
-        });
+    // USGS 지진 정보 호출
+    fetch(usgsEarthquakeApiUrl)
+        .then(response => response.json())
+        .then(data => {
+            // 지진 정보를 지도에 추가
+            map.on('load', function () {
+                map.addSource('earthquakes', {
+                    'type': 'geojson',
+                    'data': data
+                });
 
-        map.addLayer({
-            'id': 'earthquakes',
-            'type': 'circle',
-            'source': 'earthquakes',
-            'paint': {
-                'circle-radius': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'magnitude'],
-                    1, 4,
-                    6, 24
-                ],
-                'circle-color': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'magnitude'],
-                    1, '#2DC4B2',
-                    6, '#F7455D'
-                ],
-                'circle-stroke-color': '#000000',
-                'circle-stroke-width': 1
-            }
-        });
+                map.addLayer({
+                    'id': 'earthquakes',
+                    'type': 'circle',
+                    'source': 'earthquakes',
+                    'paint': {
+                        'circle-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'mag'],
+                            1, 4,
+                            6, 24
+                        ],
+                        'circle-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'mag'],
+                            1, '#2DC4B2',
+                            6, '#F7455D'
+                        ],
+                        'circle-stroke-color': '#000000',
+                        'circle-stroke-width': 1
+                    }
+                });
 
-        // 팝업 추가
-        map.on('click', 'earthquakes', function (e) {
-            const coordinates = e.features[0].geometry.coordinates.slice();
-            const magnitude = e.features[0].properties.magnitude;
-            const place = e.features[0].properties.place;
+                // 팝업 추가
+                map.on('click', 'earthquakes', function (e) {
+                    const coordinates = e.features[0].geometry.coordinates.slice();
+                    const magnitude = e.features[0].properties.mag;
+                    const place = e.features[0].properties.place;
 
-            new mapboxgl.Popup()
-                .setLngLat(coordinates)
-                .setHTML(`<strong>${place}</strong><br>Magnitude: ${magnitude}`)
-                .addTo(map);
-        });
+                    new mapboxgl.Popup()
+                        .setLngLat(coordinates)
+                        .setHTML(`<strong>${place}</strong><br>Magnitude: ${magnitude}`)
+                        .addTo(map);
+                });
 
-        // 마우스 커서 스타일 변경
-        map.on('mouseenter', 'earthquakes', function () {
-            map.getCanvas().style.cursor = 'pointer';
-        });
+                // 마우스 커서 스타일 변경
+                map.on('mouseenter', 'earthquakes', function () {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
 
-        map.on('mouseleave', 'earthquakes', function () {
-            map.getCanvas().style.cursor = '';
-        });
-    });
+                map.on('mouseleave', 'earthquakes', function () {
+                    map.getCanvas().style.cursor = '';
+                });
+            });
+        })
+        .catch(error => console.error('Error fetching USGS earthquake data:', error));
 </script>
 </body>
 </html>
