@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Mapbox GL JS 지진 정보 표시</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    // Mapbox 접근 토큰 설정
+    mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+
+    // Mapbox 지도 초기화
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [127.024612, 37.532600], // 서울 기준 중심 좌표
+        zoom: 5
+    });
+
+    // 지진 정보 GeoJSON 데이터
+    const earthquakeData = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "magnitude": 5.2,
+                    "place": "서울"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [127.024612, 37.532600]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "magnitude": 4.8,
+                    "place": "부산"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [129.075642, 35.179554]
+                }
+            },
+            // 추가 지진 데이터 여기에 입력
+        ]
+    };
+
+    // 지도에 지진 정보 레이어 추가
+    map.on('load', function () {
+        map.addSource('earthquakes', {
+            'type': 'geojson',
+            'data': earthquakeData
+        });
+
+        map.addLayer({
+            'id': 'earthquakes',
+            'type': 'circle',
+            'source': 'earthquakes',
+            'paint': {
+                'circle-radius': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'magnitude'],
+                    1, 4,
+                    6, 24
+                ],
+                'circle-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'magnitude'],
+                    1, '#2DC4B2',
+                    6, '#F7455D'
+                ],
+                'circle-stroke-color': '#000000',
+                'circle-stroke-width': 1
+            }
+        });
+
+        // 팝업 추가
+        map.on('click', 'earthquakes', function (e) {
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const magnitude = e.features[0].properties.magnitude;
+            const place = e.features[0].properties.place;
+
+            new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(`<strong>${place}</strong><br>Magnitude: ${magnitude}`)
+                .addTo(map);
+        });
+
+        // 마우스 커서 스타일 변경
+        map.on('mouseenter', 'earthquakes', function () {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'earthquakes', function () {
+            map.getCanvas().style.cursor = '';
+        });
+    });
+</script>
+</body>
+</html>
