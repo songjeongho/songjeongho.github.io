@@ -1,187 +1,112 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USGS Earthquake Information</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <meta charset="utf-8" />
+    <title>Mapbox GL JS 지진 정보 표시</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet" />
     <style>
-        #map { height: 600px; }
-        #status-bar { padding: 10px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
-        .table-container { margin-top: 20px; }
-        .hand-cursor { cursor: pointer; }
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     </style>
 </head>
 <body>
-    <div id="status-bar">Loading data...</div>
-    <div id="map"></div>
-    <div class="container table-container">
-        <div id="table-controls" class="d-flex justify-content-between">
-            <div id="record-info"></div>
-            <div>
-                Rows per page:
-                <select id="rows-per-page" class="custom-select custom-select-sm">
-                    <option value="5">5</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-            </div>
-        </div>
-        <table id="earthquake-table" class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Magnitude</th>
-                    <th>Place</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-        <div id="pagination-controls" class="d-flex justify-content-center"></div>
-    </div>
+<div id="map"></div>
+<script>
+    // Mapbox 접근 토큰 설정
+    mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
 
-    <div class="modal fade" id="earthquakeModal" tabindex="-1" role="dialog" aria-labelledby="earthquakeModalLabel" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="earthquakeModalLabel">Earthquake Details</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body"></div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="zoom-in-btn">Zoom In</button>
-                    <button type="button" class="btn btn-primary" id="return-btn" style="display: none;">Return</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    // Mapbox 지도 초기화
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [127.024612, 37.532600], // 서울 기준 중심 좌표
+        zoom: 5
+    });
 
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-    <script>
-        let map = L.map('map').setView([37.7749, -122.4194], 5);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18,
-        }).addTo(map);
-
-        let statusBar = document.getElementById('status-bar');
-        let earthquakeTable = document.getElementById('earthquake-table').getElementsByTagName('tbody')[0];
-        let recordInfo = document.getElementById('record-info');
-        let rowsPerPage = document.getElementById('rows-per-page');
-        let paginationControls = document.getElementById('pagination-controls');
-        let earthquakeModal = $('#earthquakeModal');
-        let modalBody = earthquakeModal.find('.modal-body');
-        let zoomInBtn = document.getElementById('zoom-in-btn');
-        let returnBtn = document.getElementById('return-btn');
-
-        let earthquakes = [];
-        let markers = [];
-        let currentPage = 1;
-        let recordsPerPage = parseInt(rowsPerPage.value);
-
-        function fetchEarthquakeData() {
-            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson')
-                .then(response => response.json())
-                .then(data => {
-                    earthquakes = data.features;
-                    displayEarthquakeData();
-                    statusBar.textContent = `Data updated: ${new Date().toLocaleString()}`;
-                })
-                .catch(error => {
-                    statusBar.textContent = `Error fetching data: ${error}`;
-                });
-        }
-
-        function displayEarthquakeData() {
-            clearMarkers();
-            let startIndex = (currentPage - 1) * recordsPerPage;
-            let endIndex = Math.min(startIndex + recordsPerPage, earthquakes.length);
-
-            earthquakeTable.innerHTML = '';
-            for (let i = startIndex; i < endIndex; i++) {
-                let eq = earthquakes[i];
-                let row = earthquakeTable.insertRow();
-                row.classList.add('hand-cursor');
-                row.addEventListener('click', () => showEarthquakeDetails(eq));
-
-                row.insertCell(0).textContent = eq.properties.mag;
-                row.insertCell(1).textContent = eq.properties.place;
-                row.insertCell(2).textContent = new Date(eq.properties.time).toLocaleString();
-
-                let marker = L.marker([eq.geometry.coordinates[1], eq.geometry.coordinates[0]]).addTo(map);
-                marker.on('click', () => showEarthquakeDetails(eq));
-                markers.push(marker);
-            }
-
-            recordInfo.textContent = `Showing ${startIndex + 1} to ${endIndex} of ${earthquakes.length} records`;
-            updatePaginationControls();
-        }
-
-        function clearMarkers() {
-            markers.forEach(marker => marker.remove());
-            markers = [];
-        }
-
-        function showEarthquakeDetails(eq) {
-            modalBody.html(`
-                <p><strong>Magnitude:</strong> ${eq.properties.mag}</p>
-                <p><strong>Location:</strong> ${eq.properties.place}</p>
-                <p><strong>Time:</strong> ${new Date(eq.properties.time).toLocaleString()}</p>
-                <p><strong>Coordinates:</strong> [${eq.geometry.coordinates[1]}, ${eq.geometry.coordinates[0]}]</p>
-            `);
-            earthquakeModal.modal('show');
-
-            zoomInBtn.onclick = () => {
-                map.setView([eq.geometry.coordinates[1], eq.geometry.coordinates[0]], 10);
-                zoomInBtn.style.display = 'none';
-                returnBtn.style.display = 'inline-block';
-            };
-
-            returnBtn.onclick = () => {
-                map.setView([37.7749, -122.4194], 5);
-                zoomInBtn.style.display = 'inline-block';
-                returnBtn.style.display = 'none';
-                earthquakeModal.modal('hide');
-            };
-        }
-
-        function updatePaginationControls() {
-            paginationControls.innerHTML = '';
-            let totalPages = Math.ceil(earthquakes.length / recordsPerPage);
-
-            for (let i = 1; i <= totalPages; i++) {
-                let pageButton = document.createElement('button');
-                pageButton.classList.add('btn', 'btn-sm', 'btn-secondary', 'mx-1');
-                pageButton.textContent = i;
-                pageButton.onclick = () => {
-                    currentPage = i;
-                    displayEarthquakeData();
-                };
-                if (i === currentPage) {
-                    pageButton.classList.add('btn-primary');
+    // 지진 정보 GeoJSON 데이터
+    const earthquakeData = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "magnitude": 5.2,
+                    "place": "서울"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [127.024612, 37.532600]
                 }
-                paginationControls.appendChild(pageButton);
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "magnitude": 4.8,
+                    "place": "부산"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [129.075642, 35.179554]
+                }
+            },
+            // 추가 지진 데이터 여기에 입력
+        ]
+    };
+
+    // 지도에 지진 정보 레이어 추가
+    map.on('load', function () {
+        map.addSource('earthquakes', {
+            'type': 'geojson',
+            'data': earthquakeData
+        });
+
+        map.addLayer({
+            'id': 'earthquakes',
+            'type': 'circle',
+            'source': 'earthquakes',
+            'paint': {
+                'circle-radius': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'magnitude'],
+                    1, 4,
+                    6, 24
+                ],
+                'circle-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'magnitude'],
+                    1, '#2DC4B2',
+                    6, '#F7455D'
+                ],
+                'circle-stroke-color': '#000000',
+                'circle-stroke-width': 1
             }
-        }
-
-        rowsPerPage.addEventListener('change', () => {
-            recordsPerPage = parseInt(rowsPerPage.value);
-            currentPage = 1;
-            displayEarthquakeData();
         });
 
-        map.on('mousemove', function (e) {
-            statusBar.textContent = `Latitude: ${e.latlng.lat.toFixed(4)}, Longitude: ${e.latlng.lng.toFixed(4)}`;
+        // 팝업 추가
+        map.on('click', 'earthquakes', function (e) {
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const magnitude = e.features[0].properties.magnitude;
+            const place = e.features[0].properties.place;
+
+            new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(`<strong>${place}</strong><br>Magnitude: ${magnitude}`)
+                .addTo(map);
         });
 
-        fetchEarthquakeData();
-        setInterval(fetchEarthquakeData, 5 * 60 * 1000);
-    </script>
+        // 마우스 커서 스타일 변경
+        map.on('mouseenter', 'earthquakes', function () {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'earthquakes', function () {
+            map.getCanvas().style.cursor = '';
+        });
+    });
+</script>
 </body>
 </html>
