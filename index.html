@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Information Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        #statusbar {
+            margin-top: 10px;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+        .btn {
+            display: inline-block;
+            padding: 6px 12px;
+            margin-top: 5px;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.5;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            user-select: none;
+            background-color: #007bff;
+            color: #fff;
+            border: 1px solid transparent;
+            border-radius: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="statusbar">Latitude: <span id="lat">0</span>, Longitude: <span id="lng">0</span></div>
+    <input type="text" id="search" placeholder="Search location">
+    <button onclick="searchLocation()">Search</button>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-ajax/dist/leaflet.ajax.min.js"></script>
+
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([37.5665, 126.9780], 10); // Seoul's coordinates
+
+        // Load and display tile layer on the map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // GeoJSON file URL
+        var geojsonURL = 'path/to/your/geojson/file.geojson'; // Update this with your GeoJSON file path
+
+        // Disaster icons
+        var disasterIcons = {
+            "fire": L.icon({
+                iconUrl: 'fire-icon.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34]
+            }),
+            "flood": L.icon({
+                iconUrl: 'flood-icon.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34]
+            }),
+            "earthquake": L.icon({
+                iconUrl: 'earthquake-icon.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34]
+            })
+        };
+
+        // Load GeoJSON and add markers to the map
+        var geojsonLayer = new L.GeoJSON.AJAX(geojsonURL, {
+            onEachFeature: function (feature, layer) {
+                var popupContent = '<div class="info"><h4>' + feature.properties.type + '</h4>' +
+                                   '<p>' + feature.properties.description + '</p>' +
+                                   '<button class="btn" onclick="zoomToLocation([' + feature.geometry.coordinates[1] + ',' + feature.geometry.coordinates[0] + '])">Zoom In</button>' +
+                                   '<button class="btn" onclick="returnToDefault()">Return</button></div>';
+                layer.bindPopup(popupContent);
+
+                // Set custom icon
+                layer.setIcon(disasterIcons[feature.properties.type]);
+            }
+        }).addTo(map);
+
+        // Status bar update
+        map.on('mousemove', function (e) {
+            document.getElementById('lat').textContent = e.latlng.lat.toFixed(4);
+            document.getElementById('lng').textContent = e.latlng.lng.toFixed(4);
+        });
+
+        // Search location function
+        function searchLocation() {
+            var searchText = document.getElementById('search').value;
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchText}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        var bbox = data[0].boundingbox;
+                        var bounds = [
+                            [bbox[0], bbox[2]],
+                            [bbox[1], bbox[3]]
+                        ];
+                        map.fitBounds(bounds);
+                    } else {
+                        alert("Location not found!");
+                    }
+                });
+        }
+
+        // Zoom to specific location
+        function zoomToLocation(latlng) {
+            map.setView(latlng, 15);
+        }
+
+        // Return to default view
+        function returnToDefault() {
+            map.setView([37.5665, 126.9780], 10);
+        }
+    </script>
+</body>
+</html>
