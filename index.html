@@ -44,7 +44,7 @@
             const coordinates = document.getElementById('coordinates');
 
             // 지진 데이터를 가져옵니다.
-            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson')
+            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson')
                 .then(response => response.json())
                 .then(data => {
                     const geoJsonLayer = L.geoJSON(data, {
