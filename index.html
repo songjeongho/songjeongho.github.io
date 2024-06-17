@@ -3,99 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disaster Information Map</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-search@2.9.8/dist/leaflet-search.min.css" />
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <title>Earthquake Map with Leaflet.js</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
     <style>
         #map {
-            height: 900px;
+            height: 600px;
         }
         #status-bar {
-            height: 10px;
             background-color: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
+            padding: 10px;
+            border-top: 1px solid #dee2e6;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="status-bar" class="border-top">
-        <div>Disaster Information Map</div>
-        <div id="coordinates">Coordinates: N/A</div>
+    <div id="status-bar" class="d-flex justify-content-between">
+        <span id="message">Fetching earthquake data...</span>
+        <span id="coordinates"></span>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-search@2.9.8/dist/leaflet-search.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
     <script>
-        // Create the map
-        var map = L.map('map').setView([37.5665, 126.9780], 7);
+        // Initialize the map
+        var map = L.map('map').setView([37.7749, -122.4194], 5);
 
-        // Add OpenStreetMap tiles
+        // Add a tile layer to the map
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
+            attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // Add geoJSON data
-        var geojsonData = {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "name": "Disaster 1",
-                        "description": "Description of Disaster 1"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [126.9780, 37.5665]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "name": "Disaster 2",
-                        "description": "Description of Disaster 2"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [127.0, 37.57]
-                    }
-                }
-            ]
-        };
+        // Add search control to the map
+        L.Control.geocoder().addTo(map);
 
-        // Add geoJSON layer
-        var geojsonLayer = L.geoJSON(geojsonData, {
-            onEachFeature: function (feature, layer) {
-                layer.bindPopup('<b>' + feature.properties.name + '</b><br>' + feature.properties.description);
-            }
-        }).addTo(map);
+        // Status bar elements
+        var message = document.getElementById('message');
+        var coordinates = document.getElementById('coordinates');
 
-        // Add Leaflet Search Control
-        var searchControl = new L.Control.Search({
-            layer: geojsonLayer,
-            propertyName: 'name',
-            marker: false,
-            moveToLocation: function(latlng, title, map) {
-                map.setView(latlng, 15); // set the zoom
-            }
-        });
+        // Fetch earthquake data from USGS API
+        function fetchEarthquakeData() {
+            message.textContent = 'Fetching earthquake data...';
 
-        searchControl.on('search:locationfound', function(e) {
-            e.layer.openPopup();
-        });
+            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    message.textContent = 'Earthquake data updated.';
+                    addEarthquakeMarkers(data);
+                })
+                .catch(error => {
+                    message.textContent = 'Error fetching earthquake data.';
+                    console.error(error);
+                });
+        }
 
-        map.addControl(searchControl);
+        // Add earthquake markers to the map
+        function addEarthquakeMarkers(data) {
+            data.features.forEach(feature => {
+                var coords = feature.geometry.coordinates;
+                var latLng = [coords[1], coords[0]];
+                var magnitude = feature.properties.mag;
+                var place = feature.properties.place;
+                var time = new Date(feature.properties.time);
 
-        // Update coordinates in the status bar
+                var marker = L.marker(latLng).addTo(map);
+                marker.bindPopup(`<b>Magnitude:</b> ${magnitude}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
+            });
+        }
+
+        // Update earthquake data every 5 minutes
+        fetchEarthquakeData();
+        setInterval(fetchEarthquakeData, 300000); // 300000 ms = 5 minutes
+
+        // Update coordinates in the status bar on mouse move
         map.on('mousemove', function(e) {
-            $('#coordinates').text('Coordinates: ' + e.latlng.lat.toFixed(4) + ', ' + e.latlng.lng.toFixed(4));
+            coordinates.textContent = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
         });
+
     </script>
 </body>
 </html>
