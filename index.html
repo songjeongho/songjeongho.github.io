@@ -1,74 +1,82 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Earthquake Map</title>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch/dist/geosearch.css" />
+    <title>Earthquake Map</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.3/leaflet-search.min.css" />
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
     <style>
         #map { height: 600px; }
-        .status-bar { position: fixed; bottom: 0; width: 100%; background: #333; color: #fff; padding: 5px 10px; }
+        #status-bar { background-color: #f8f9fa; padding: 10px; }
+        #earthquake-table { margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <div class="status-bar">
-        <span id="status-message">Fetching earthquake data...</span>
-        <span id="mouse-coords" class="float-right"></span>
-    </div>
-    <div class="container mt-4">
-        <h2>Earthquake Information</h2>
-        <div id="table-container">
-            <table class="table table-bordered table-striped">
-                <thead class="thead-dark">
+    <div class="container">
+        <h1 class="mt-4">Earthquake Map</h1>
+        <div id="map"></div>
+        <div id="status-bar" class="d-flex justify-content-between">
+            <div id="coordinates">Hover over the map to see coordinates</div>
+            <div id="status">Loading data...</div>
+        </div>
+        <div id="earthquake-info">
+            <h2>Earthquake Data</h2>
+            <div id="earthquake-count">Total Earthquakes: 0</div>
+            <table id="earthquake-table" class="table table-striped">
+                <thead>
                     <tr>
+                        <th>#</th>
                         <th>Location</th>
                         <th>Magnitude</th>
                         <th>Time</th>
                     </tr>
                 </thead>
-                <tbody id="earthquake-table"></tbody>
+                <tbody></tbody>
             </table>
             <nav>
                 <ul class="pagination">
                     <li class="page-item"><a class="page-link" href="#">Previous</a></li>
                     <li class="page-item"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
                     <li class="page-item"><a class="page-link" href="#">Next</a></li>
                 </ul>
             </nav>
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-geosearch/dist/geosearch.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.3/leaflet-search.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.1/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script>
         const map = L.map('map').setView([37.7749, -122.4194], 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        const searchControl = new GeoSearch.GeoSearchControl({
-            provider: new GeoSearch.OpenStreetMapProvider(),
-            style: 'bar',
-            autoComplete: true,
+        const searchControl = new L.Control.Search({
+            layer: L.layerGroup().addTo(map),
+            initial: false,
+            zoom: 12,
+            marker: false
         });
+
         map.addControl(searchControl);
 
-        const resetViewBtn = L.control({position: 'topright'});
-        resetViewBtn.onAdd = function(map) {
-            const div = L.DomUtil.create('div', 'reset-view-btn');
-            div.innerHTML = '<button class="btn btn-primary">Reset View</button>';
-            div.onclick = function() {
-                map.setView([37.7749, -122.4194], 5);
-            }
-            return div;
-        }
-        resetViewBtn.addTo(map);
+        const homeButton = L.control({ position: 'topleft' });
+        homeButton.onAdd = function () {
+            const btn = L.DomUtil.create('button', 'btn btn-primary');
+            btn.innerHTML = 'Home';
+            btn.onclick = () => map.setView([37.7749, -122.4194], 5);
+            return btn;
+        };
+        homeButton.addTo(map);
 
-        map.on('mousemove', function(e) {
-            document.getElementById('mouse-coords').innerText = `Lat: ${e.latlng.lat}, Lng: ${e.latlng.lng}`;
+        map.on('mousemove', function (e) {
+            document.getElementById('coordinates').innerText = `Lat: ${e.latlng.lat}, Lng: ${e.latlng.lng}`;
         });
 
         async function fetchEarthquakeData() {
@@ -76,30 +84,41 @@
             const data = await response.json();
             updateMap(data.features);
             updateTable(data.features);
+            document.getElementById('status').innerText = 'Data loaded';
         }
 
         function updateMap(earthquakes) {
-            earthquakes.forEach(earthquake => {
-                const [lng, lat] = earthquake.geometry.coordinates;
-                const marker = L.marker([lat, lng]).addTo(map);
-                marker.bindPopup(`<b>Location:</b> ${earthquake.properties.place}<br><b>Magnitude:</b> ${earthquake.properties.mag}<br><b>Time:</b> ${new Date(earthquake.properties.time).toLocaleString()}`);
+            earthquakes.forEach((quake) => {
+                const coords = quake.geometry.coordinates;
+                const latLng = [coords[1], coords[0]];
+                const marker = L.marker(latLng).addTo(map);
+                marker.bindPopup(`
+                    <b>Location:</b> ${quake.properties.place}<br>
+                    <b>Magnitude:</b> ${quake.properties.mag}<br>
+                    <b>Time:</b> ${new Date(quake.properties.time)}
+                `);
             });
         }
 
         function updateTable(earthquakes) {
-            const tableBody = document.getElementById('earthquake-table');
+            const tableBody = document.querySelector('#earthquake-table tbody');
             tableBody.innerHTML = '';
-            earthquakes.forEach(earthquake => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td>${earthquake.properties.place}</td><td>${earthquake.properties.mag}</td><td>${new Date(earthquake.properties.time).toLocaleString()}</td>`;
-                tableBody.appendChild(row);
+            earthquakes.forEach((quake, index) => {
+                const row = `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${quake.properties.place}</td>
+                        <td>${quake.properties.mag}</td>
+                        <td>${new Date(quake.properties.time)}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
             });
+            document.getElementById('earthquake-count').innerText = `Total Earthquakes: ${earthquakes.length}`;
         }
 
-        setInterval(fetchEarthquakeData, 300000); // 5 minutes in milliseconds
+        setInterval(fetchEarthquakeData, 5 * 60 * 1000);
         fetchEarthquakeData();
-
-        document.getElementById('status-message').innerText = 'Earthquake data loaded';
     </script>
 </body>
 </html>
