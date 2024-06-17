@@ -3,93 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earthquake Map with Leaflet.js</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <title>Earthquake Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
         #map {
-            height: 90vh;
+            height: 80vh;
             width: 100%;
         }
-        #statusbar {
-            height: 10vh;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 10px;
-            background-color: #f1f1f1;
-            border-top: 1px solid #ccc;
+        #status-bar {
+            height: 20vh;
+            width: 100%;
+            background: #f8f9fa;
+            padding: 10px;
+            border-top: 1px solid #dee2e6;
+        }
+        #status-message {
+            float: left;
+        }
+        #mouse-coordinates {
+            float: right;
         }
     </style>
 </head>
 <body>
+    <div id="map"></div>
+    <div id="status-bar">
+        <div id="status-message">Loading...</div>
+        <div id="mouse-coordinates"></div>
+    </div>
 
-<div id="map"></div>
-<div id="statusbar">
-    <span id="status-message">Waiting for data...</span>
-    <span id="coordinates"></span>
-</div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-search/dist/leaflet-search.src.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
-<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-<script src="https://unpkg.com/leaflet-search@3.0.0/dist/leaflet-search.src.js"></script>
+    <script>
+        const map = L.map('map').setView([37.7749, -122.4194], 5);
 
-<script>
-    const map = L.map('map').setView([37.7749, -122.4194], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+        const statusMessage = document.getElementById('status-message');
+        const mouseCoordinates = document.getElementById('mouse-coordinates');
 
-    const markersLayer = new L.LayerGroup();
-    map.addLayer(markersLayer);
-
-    L.Control.geocoder().addTo(map);
-    const searchControl = new L.Control.Search({
-        layer: markersLayer,
-        initial: false,
-        zoom: 12,
-        marker: false
-    }).addTo(map);
-
-    function fetchEarthquakeData() {
-        document.getElementById('status-message').textContent = 'Fetching earthquake data...';
-
-        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
-            .then(response => response.json())
-            .then(data => {
-                markersLayer.clearLayers();
-                data.features.forEach(feature => {
-                    const coords = feature.geometry.coordinates;
-                    const latLng = [coords[1], coords[0]];
-                    const magnitude = feature.properties.mag;
-                    const place = feature.properties.place;
-                    const time = new Date(feature.properties.time).toLocaleString();
-
-                    const marker = L.marker(latLng).bindPopup(`
-                        <strong>Location:</strong> ${place}<br>
-                        <strong>Magnitude:</strong> ${magnitude}<br>
-                        <strong>Time:</strong> ${time}
-                    `);
-
-                    markersLayer.addLayer(marker);
+        function fetchEarthquakeData() {
+            statusMessage.innerHTML = 'Fetching earthquake data...';
+            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    addEarthquakesToMap(data);
+                    statusMessage.innerHTML = 'Data loaded successfully';
+                })
+                .catch(error => {
+                    statusMessage.innerHTML = 'Error fetching data';
+                    console.error(error);
                 });
+        }
 
-                document.getElementById('status-message').textContent = 'Data updated at ' + new Date().toLocaleTimeString();
-            })
-            .catch(error => {
-                console.error('Error fetching earthquake data:', error);
-                document.getElementById('status-message').textContent = 'Error fetching data';
+        function addEarthquakesToMap(data) {
+            const earthquakes = data.features;
+            earthquakes.forEach(earthquake => {
+                const coords = earthquake.geometry.coordinates;
+                const lat = coords[1];
+                const lng = coords[0];
+                const magnitude = earthquake.properties.mag;
+                const place = earthquake.properties.place;
+
+                const marker = L.marker([lat, lng]).addTo(map);
+                marker.bindPopup(`<b>Location:</b> ${place}<br><b>Magnitude:</b> ${magnitude}`);
             });
-    }
+        }
 
-    fetchEarthquakeData();
-    setInterval(fetchEarthquakeData, 300000); // 5 minutes
+        setInterval(fetchEarthquakeData, 5 * 60 * 1000);
+        fetchEarthquakeData();
 
-    map.on('mousemove', function(e) {
-        document.getElementById('coordinates').textContent = `Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`;
-    });
-</script>
+        const searchControl = new L.Control.Search({
+            layer: map,
+            initial: false,
+            collapsed: true,
+        });
 
+        map.addControl(searchControl);
+
+        L.control.locate({
+            strings: {
+                title: "Show me where I am"
+            }
+        }).addTo(map);
+
+        map.on('mousemove', function (e) {
+            mouseCoordinates.innerHTML = `Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`;
+        });
+    </script>
 </body>
 </html>
