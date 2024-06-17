@@ -4,87 +4,92 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Earthquake Map</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
     <style>
-        #map { height: 600px; }
+        #map {
+            height: 90vh;
+            width: 100%;
+        }
         #status-bar {
-            background-color: #f8f9fa;
-            padding: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-top: 1px solid #dee2e6;
+            height: 5vh;
+            line-height: 5vh;
         }
     </style>
 </head>
 <body>
+    <div id="map"></div>
+    <div id="status-bar" class="bg-light border-top d-flex justify-content-between px-3">
+        <div id="message">Initializing...</div>
+        <div id="coordinates"></div>
+    </div>
 
-<div id="map"></div>
-<div id="status-bar">
-    <span id="status-message">Fetching earthquake data...</span>
-    <span id="coordinates"></span>
-</div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.8/leaflet-search.src.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.8/leaflet-search.min.css" />
+    
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([37.7749, -122.4194], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(map);
 
-<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-search/dist/leaflet-search.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-search/dist/leaflet-search.min.css" />
-
-<script>
-    // Initialize the map
-    var map = L.map('map').setView([37.7749, -122.4194], 5);
-
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 18,
-    }).addTo(map);
-
-    // Add geolocation control
-    L.control.locate().addTo(map);
-
-    var markers = L.layerGroup().addTo(map);
-
-    // Fetch earthquake data from USGS every 5 minutes
-    function fetchEarthquakeData() {
-        $('#status-message').text('Fetching earthquake data...');
-        $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
-            markers.clearLayers();
-            var earthquakes = data.features;
-            earthquakes.forEach(function(earthquake) {
-                var coords = earthquake.geometry.coordinates;
-                var lat = coords[1];
-                var lng = coords[0];
-                var magnitude = earthquake.properties.mag;
-                var place = earthquake.properties.place;
-                var time = new Date(earthquake.properties.time).toLocaleString();
-
-                var marker = L.marker([lat, lng]).addTo(markers);
-                marker.bindPopup(`<b>Magnitude:</b> ${magnitude}<br/><b>Location:</b> ${place}<br/><b>Time:</b> ${time}`);
-            });
-            $('#status-message').text(`Last updated: ${new Date().toLocaleTimeString()}`);
+        // Initialize the search control
+        var searchControl = new L.Control.Search({
+            url: 'https://nominatim.openstreetmap.org/search?format=json&q={s}',
+            jsonpParam: 'json_callback',
+            propertyName: 'display_name',
+            propertyLoc: ['lat','lon'],
+            marker: false,
+            autoCollapse: true,
+            autoType: false,
+            minLength: 2
         });
-    }
+        searchControl.addTo(map);
 
-    fetchEarthquakeData();
-    setInterval(fetchEarthquakeData, 300000); // 5 minutes
+        // Geolocation control
+        var locateControl = L.control.locate({
+            strings: {
+                title: "Show me where I am"
+            }
+        }).addTo(map);
 
-    // Add search control
-    var searchControl = new L.Control.Search({
-        layer: markers,
-        propertyName: 'place',
-        marker: false,
-        moveToLocation: function(latlng) {
-            map.setView(latlng, 10);
+        // Function to fetch earthquake data
+        function fetchEarthquakeData() {
+            $('#message').text('Fetching earthquake data...');
+            $.getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson', function(data) {
+                L.geoJSON(data, {
+                    onEachFeature: function(feature, layer) {
+                        layer.bindPopup('<strong>Location:</strong> ' + feature.properties.place + '<br>' +
+                                        '<strong>Magnitude:</strong> ' + feature.properties.mag + '<br>' +
+                                        '<strong>Time:</strong> ' + new Date(feature.properties.time));
+                    }
+                }).addTo(map);
+                $('#message').text('Earthquake data updated');
+            }).fail(function() {
+                $('#message').text('Failed to fetch earthquake data');
+            });
         }
-    });
-    map.addControl(searchControl);
 
-    // Update coordinates on mouse move
-    map.on('mousemove', function(e) {
-        $('#coordinates').text(`Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`);
-    });
-</script>
+        // Initial fetch of earthquake data
+        fetchEarthquakeData();
 
+        // Fetch earthquake data every 5 minutes
+        setInterval(fetchEarthquakeData, 300000);
+
+        // Show coordinates on mouse move
+        map.on('mousemove', function(e) {
+            $('#coordinates').text('Lat: ' + e.latlng.lat.toFixed(4) + ', Lng: ' + e.latlng.lng.toFixed(4));
+        });
+
+        // Add CSS for Locate Control
+        L.Control.Locate.include({
+            _setClasses: function (className) {
+                this._container.className += ' leaflet-control-locate';
+            }
+        });
+    </script>
 </body>
 </html>
