@@ -3,88 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USGS Earthquake Map</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.8/leaflet-search.min.css" />
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <title>Disaster Information Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-search@2.9.8/dist/leaflet-search.min.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
-        #map { height: 90vh; }
+        #map {
+            height: 90vh;
+        }
         #status-bar {
             height: 10vh;
+            background-color: #f8f9fa;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 0 10px;
-            background: #f8f9fa;
-            border-top: 1px solid #dee2e6;
-        }
-        .spinner-border {
-            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="status-bar" class="d-flex">
-        <div>Loading USGS Earthquake Data...</div>
-        <div class="spinner-border text-primary" role="status">
-            <span class="sr-only">Loading...</span>
-        </div>
-        <div id="latlong">Lat: N/A, Lng: N/A</div>
+    <div id="status-bar" class="border-top">
+        <div>Disaster Information Map</div>
+        <div id="coordinates">Coordinates: N/A</div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.8/leaflet-search.min.js"></script>
-    <script>
-        const map = L.map('map').setView([37.7749, -122.4194], 5);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-        
-        const earthquakeLayer = L.layerGroup().addTo(map);
-        const statusBar = document.getElementById('status-bar');
-        const spinner = document.querySelector('.spinner-border');
-        const latlong = document.getElementById('latlong');
 
-        const searchControl = new L.Control.Search({
-            layer: earthquakeLayer,
-            propertyName: 'place',
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-search@2.9.8/dist/leaflet-search.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        // Create the map
+        var map = L.map('map').setView([37.5665, 126.9780], 12);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add geoJSON data
+        var geojsonData = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": "Disaster 1",
+                        "description": "Description of Disaster 1"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [126.9780, 37.5665]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": "Disaster 2",
+                        "description": "Description of Disaster 2"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [127.0, 37.57]
+                    }
+                }
+            ]
+        };
+
+        // Add geoJSON layer
+        var geojsonLayer = L.geoJSON(geojsonData, {
+            onEachFeature: function (feature, layer) {
+                layer.bindPopup('<b>' + feature.properties.name + '</b><br>' + feature.properties.description);
+            }
+        }).addTo(map);
+
+        // Add Leaflet Search Control
+        var searchControl = new L.Control.Search({
+            layer: geojsonLayer,
+            propertyName: 'name',
+            marker: false,
             moveToLocation: function(latlng, title, map) {
-                map.setView(latlng, 10);
+                map.setView(latlng, 15); // set the zoom
             }
         });
 
-        searchControl.addTo(map);
-
-        function updateEarthquakeData() {
-            spinner.style.display = 'block';
-            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
-                .then(response => response.json())
-                .then(data => {
-                    earthquakeLayer.clearLayers();
-                    L.geoJSON(data, {
-                        onEachFeature: function (feature, layer) {
-                            const { mag, place, time } = feature.properties;
-                            layer.bindPopup(`<strong>Location:</strong> ${place}<br><strong>Magnitude:</strong> ${mag}<br><strong>Time:</strong> ${new Date(time)}`);
-                            layer.feature = { properties: { place } }; // for search
-                        }
-                    }).addTo(earthquakeLayer);
-                    spinner.style.display = 'none';
-                    statusBar.firstChild.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-                })
-                .catch(error => {
-                    console.error('Error fetching earthquake data:', error);
-                    spinner.style.display = 'none';
-                    statusBar.firstChild.textContent = 'Error loading data';
-                });
-        }
-
-        map.on('mousemove', function (e) {
-            latlong.textContent = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
+        searchControl.on('search:locationfound', function(e) {
+            e.layer.openPopup();
         });
 
-        updateEarthquakeData();
-        setInterval(updateEarthquakeData, 300000); // update every 5 minutes
+        map.addControl(searchControl);
+
+        // Update coordinates in the status bar
+        map.on('mousemove', function(e) {
+            $('#coordinates').text('Coordinates: ' + e.latlng.lat.toFixed(4) + ', ' + e.latlng.lng.toFixed(4));
+        });
     </script>
 </body>
 </html>
