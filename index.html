@@ -3,137 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disaster Information Map</title>
+    <title>Earthquake Map with Leaflet.js</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <style>
         #map {
-            height: 600px;
+            height: 90vh;
             width: 100%;
         }
         #statusbar {
-            margin-top: 10px;
-        }
-        .info {
-            padding: 6px 8px;
-            font: 14px/16px Arial, Helvetica, sans-serif;
-            background: white;
-            background: rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-            border-radius: 5px;
-        }
-        .info h4 {
-            margin: 0 0 5px;
-            color: #777;
-        }
-        .btn {
-            display: inline-block;
-            padding: 6px 12px;
-            margin-top: 5px;
-            font-size: 14px;
-            font-weight: 400;
-            line-height: 1.5;
-            text-align: center;
-            white-space: nowrap;
-            vertical-align: middle;
-            user-select: none;
-            background-color: #007bff;
-            color: #fff;
-            border: 1px solid transparent;
-            border-radius: 0.25rem;
+            height: 10vh;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px;
+            background-color: #f1f1f1;
+            border-top: 1px solid #ccc;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <div id="statusbar">Latitude: <span id="lat">0</span>, Longitude: <span id="lng">0</span></div>
-    <input type="text" id="search" placeholder="Search location">
-    <button onclick="searchLocation()">Search</button>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-ajax/dist/leaflet.ajax.min.js"></script>
+<div id="map"></div>
+<div id="statusbar">
+    <span id="status-message">Waiting for data...</span>
+    <span id="coordinates"></span>
+</div>
 
-    <script>
-        // Initialize the map
-        var map = L.map('map').setView([37.5665, 126.9780], 10); // Seoul's coordinates
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+<script src="https://unpkg.com/leaflet-search@3.0.0/dist/leaflet-search.src.js"></script>
 
-        // Load and display tile layer on the map
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
-        }).addTo(map);
+<script>
+    const map = L.map('map').setView([37.7749, -122.4194], 5);
 
-        // GeoJSON file URL
-        var geojsonURL = 'path/to/your/geojson/file.geojson'; // Update this with your GeoJSON file path
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
 
-        // Disaster icons
-        var disasterIcons = {
-            "fire": L.icon({
-                iconUrl: 'fire-icon.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34]
-            }),
-            "flood": L.icon({
-                iconUrl: 'flood-icon.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34]
-            }),
-            "earthquake": L.icon({
-                iconUrl: 'earthquake-icon.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34]
-            })
-        };
+    const markersLayer = new L.LayerGroup();
+    map.addLayer(markersLayer);
 
-        // Load GeoJSON and add markers to the map
-        var geojsonLayer = new L.GeoJSON.AJAX(geojsonURL, {
-            onEachFeature: function (feature, layer) {
-                var popupContent = '<div class="info"><h4>' + feature.properties.type + '</h4>' +
-                                   '<p>' + feature.properties.description + '</p>' +
-                                   '<button class="btn" onclick="zoomToLocation([' + feature.geometry.coordinates[1] + ',' + feature.geometry.coordinates[0] + '])">Zoom In</button>' +
-                                   '<button class="btn" onclick="returnToDefault()">Return</button></div>';
-                layer.bindPopup(popupContent);
+    L.Control.geocoder().addTo(map);
+    const searchControl = new L.Control.Search({
+        layer: markersLayer,
+        initial: false,
+        zoom: 12,
+        marker: false
+    }).addTo(map);
 
-                // Set custom icon
-                layer.setIcon(disasterIcons[feature.properties.type]);
-            }
-        }).addTo(map);
+    function fetchEarthquakeData() {
+        document.getElementById('status-message').textContent = 'Fetching earthquake data...';
 
-        // Status bar update
-        map.on('mousemove', function (e) {
-            document.getElementById('lat').textContent = e.latlng.lat.toFixed(4);
-            document.getElementById('lng').textContent = e.latlng.lng.toFixed(4);
-        });
+        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
+            .then(response => response.json())
+            .then(data => {
+                markersLayer.clearLayers();
+                data.features.forEach(feature => {
+                    const coords = feature.geometry.coordinates;
+                    const latLng = [coords[1], coords[0]];
+                    const magnitude = feature.properties.mag;
+                    const place = feature.properties.place;
+                    const time = new Date(feature.properties.time).toLocaleString();
 
-        // Search location function
-        function searchLocation() {
-            var searchText = document.getElementById('search').value;
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchText}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        var bbox = data[0].boundingbox;
-                        var bounds = [
-                            [bbox[0], bbox[2]],
-                            [bbox[1], bbox[3]]
-                        ];
-                        map.fitBounds(bounds);
-                    } else {
-                        alert("Location not found!");
-                    }
+                    const marker = L.marker(latLng).bindPopup(`
+                        <strong>Location:</strong> ${place}<br>
+                        <strong>Magnitude:</strong> ${magnitude}<br>
+                        <strong>Time:</strong> ${time}
+                    `);
+
+                    markersLayer.addLayer(marker);
                 });
-        }
 
-        // Zoom to specific location
-        function zoomToLocation(latlng) {
-            map.setView(latlng, 15);
-        }
+                document.getElementById('status-message').textContent = 'Data updated at ' + new Date().toLocaleTimeString();
+            })
+            .catch(error => {
+                console.error('Error fetching earthquake data:', error);
+                document.getElementById('status-message').textContent = 'Error fetching data';
+            });
+    }
 
-        // Return to default view
-        function returnToDefault() {
-            map.setView([37.5665, 126.9780], 10);
-        }
-    </script>
+    fetchEarthquakeData();
+    setInterval(fetchEarthquakeData, 300000); // 5 minutes
+
+    map.on('mousemove', function(e) {
+        document.getElementById('coordinates').textContent = `Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`;
+    });
+</script>
+
 </body>
 </html>
