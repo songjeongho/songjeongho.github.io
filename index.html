@@ -1,213 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Earthquake Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <style>
-        #map { height: 600px; }
-        #status-bar { 
-            position: fixed; 
-            bottom: 0; 
-            width: 100%; 
-            background-color: #f8f9fa; 
-            padding: 10px; 
-            display: flex; 
-            justify-content: space-between; 
-            border-top: 1px solid #dee2e6;
-        }
-        .table-header {
-            background-color: #007bff;
+        #map { height: 90vh; }
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #333;
             color: white;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="status-bar">
-        <div id="lat-lng"></div>
-        <div id="api-status">Waiting for update...</div>
+        <div id="lat-lng-display">Lat: -, Lng: -</div>
+        <div id="completion-message">API not called yet</div>
     </div>
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <table id="earthquake-table" class="table table-striped">
-                    <thead class="table-header">
-                        <tr>
-                            <th>#</th>
-                            <th>Location</th>
-                            <th>Magnitude</th>
-                            <th>Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Rows will be added dynamically -->
-                    </tbody>
-                </table>
-                <div>
-                    <label for="rows-per-page">Rows per page:</label>
-                    <select id="rows-per-page">
-                        <option value="5">5</option>
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </select>
-                </div>
-                <nav>
-                    <ul class="pagination">
-                        <!-- Pagination items will be added dynamically -->
-                    </ul>
-                </nav>
-                <div id="total-items"></div>
-            </div>
-        </div>
-    </div>
-
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script>
-        // Initialize map
         const map = L.map('map').setView([37.7749, -122.4194], 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 18,
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Initialize search control
+        const latLngDisplay = document.getElementById('lat-lng-display');
+        const completionMessage = document.getElementById('completion-message');
+
+        map.on('mousemove', function(e) {
+            latLngDisplay.innerText = `Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`;
+        });
+
         L.Control.geocoder().addTo(map);
 
-        // Status bar elements
-        const latLngDisplay = document.getElementById('lat-lng');
-        const apiStatusDisplay = document.getElementById('api-status');
-
-        // Event listener for mouse movement over map to display lat/lng
-        map.on('mousemove', function(e) {
-            latLngDisplay.textContent = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
-        });
-
-        // Fetch earthquake data every 5 minutes
-        setInterval(fetchEarthquakeData, 300000);
-        fetchEarthquakeData();
-
-        let earthquakeMarkers = [];
-        let earthquakeData = [];
-        let currentPage = 1;
-        let rowsPerPage = 10;
-
-        document.getElementById('rows-per-page').addEventListener('change', function() {
-            rowsPerPage = parseInt(this.value);
-            renderTable();
-        });
-
         function fetchEarthquakeData() {
-            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson')
+            fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2024-06-10&endtime=2024-06-17')
                 .then(response => response.json())
                 .then(data => {
-                    earthquakeData = data.features;
-                    updateMap();
-                    renderTable();
-                    apiStatusDisplay.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+                    data.features.forEach(feature => {
+                        const coords = feature.geometry.coordinates;
+                        const latLng = [coords[1], coords[0]];
+                        const magnitude = feature.properties.mag;
+                        const place = feature.properties.place;
+                        const time = new Date(feature.properties.time).toLocaleString();
+
+                        const marker = L.marker(latLng).addTo(map);
+                        marker.bindPopup(`<strong>Magnitude:</strong> ${magnitude}<br><strong>Location:</strong> ${place}<br><strong>Time:</strong> ${time}`);
+                    });
+                    completionMessage.innerText = 'API call completed';
                 })
                 .catch(error => {
                     console.error('Error fetching earthquake data:', error);
-                    apiStatusDisplay.textContent = 'Error fetching data';
+                    completionMessage.innerText = 'API call failed';
                 });
         }
 
-        function updateMap() {
-            earthquakeMarkers.forEach(marker => map.removeLayer(marker));
-            earthquakeMarkers = [];
+        setInterval(fetchEarthquakeData, 300000); // 5 minutes in milliseconds
+        fetchEarthquakeData(); // Initial call
 
-            earthquakeData.forEach(feature => {
-                const coords = feature.geometry.coordinates;
-                const latLng = [coords[1], coords[0]];
-                const marker = L.marker(latLng).addTo(map);
-
-                const magnitude = feature.properties.mag;
-                const place = feature.properties.place;
-                const time = new Date(feature.properties.time).toLocaleString();
-                const detailContent = `
-                    <div>
-                        <strong>Location:</strong> ${place}<br>
-                        <strong>Magnitude:</strong> ${magnitude}<br>
-                        <strong>Time:</strong> ${time}<br>
-                        <button id="zoom-in">Zoom In</button>
-                        <button id="return" style="display: none;">Return</button>
-                    </div>
-                `;
-
-                marker.bindPopup(detailContent);
-                marker.on('popupopen', function() {
-                    document.getElementById('zoom-in').addEventListener('click', function() {
-                        map.setView(latLng, 12);
-                        this.style.display = 'none';
-                        document.getElementById('return').style.display = 'inline';
-                    });
-                    document.getElementById('return').addEventListener('click', function() {
-                        map.setView(latLng, 5);
-                        this.style.display = 'none';
-                        document.getElementById('zoom-in').style.display = 'inline';
-                    });
-                });
-
-                earthquakeMarkers.push(marker);
-            });
-        }
-
-        function renderTable() {
-            const tableBody = document.getElementById('earthquake-table').getElementsByTagName('tbody')[0];
-            tableBody.innerHTML = '';
-
-            const start = (currentPage - 1) * rowsPerPage;
-            const end = start + rowsPerPage;
-            const paginatedData = earthquakeData.slice(start, end);
-
-            paginatedData.forEach((feature, index) => {
-                const row = tableBody.insertRow();
-                row.classList.add(index % 2 === 0 ? 'table-primary' : 'table-secondary');
-
-                row.insertCell(0).textContent = start + index + 1;
-                row.insertCell(1).textContent = feature.properties.place;
-                row.insertCell(2).textContent = feature.properties.mag;
-                row.insertCell(3).textContent = new Date(feature.properties.time).toLocaleString();
-
-                row.addEventListener('click', function() {
-                    const coords = feature.geometry.coordinates;
-                    const latLng = [coords[1], coords[0]];
-                    map.setView(latLng, 12);
-                    earthquakeMarkers[start + index].openPopup();
-                });
-            });
-
-            document.getElementById('total-items').textContent = `Total items: ${earthquakeData.length}`;
-
-            renderPagination();
-        }
-
-        function renderPagination() {
-            const pagination = document.querySelector('.pagination');
-            pagination.innerHTML = '';
-
-            const totalPages = Math.ceil(earthquakeData.length / rowsPerPage);
-            for (let i = 1; i <= totalPages; i++) {
-                const pageItem = document.createElement('li');
-                pageItem.classList.add('page-item');
-                if (i === currentPage) {
-                    pageItem.classList.add('active');
-                }
-                const pageLink = document.createElement('a');
-                pageLink.classList.add('page-link');
-                pageLink.textContent = i;
-                pageLink.addEventListener('click', function() {
-                    currentPage = i;
-                    renderTable();
-                });
-
-                pageItem.appendChild(pageLink);
-                pagination.appendChild(pageItem);
-            }
-        }
     </script>
 </body>
 </html>
