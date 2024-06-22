@@ -1,98 +1,260 @@
-<!doctype html>
-<html>
-<head>
-  <title>Nominatim-Leaflet</title>
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
-        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
-        integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
-        crossorigin=""/>
-</head>
-<body>
-<div class="container pt-5 pb-5">
-  <div class="row justify-content-md-center">
-    <input id="search" style="width: 350px;" type="text">
-    <button type="button" class="ml-5 btn btn-primary" id="search-button">Search</button>
-  </div>
-  <div class="row mt-5">
-    <ul id="result-list" class="col-4 list-group">
-    </ul>
-    <div class="col-8">
-      <div id="map-container" style="height: 1000px;"></div>
-    </div>
-  </div>
-</div>
-
-<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4xF86dIHNDz0W1" crossorigin="anonymous"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
-
-<script>
-const searchInput = document.getElementById('search');
-const resultList = document.getElementById('result-list');
-const mapContainer = document.getElementById('map-container');
-const currentMarkers = [];
-
-const map = L.map(mapContainer).setView([20.13847, 1.40625], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(map);
-
-document.getElementById('search-button').addEventListener('click', () => {
-    const query = searchInput.value;
-    fetch('https://nominatim.openstreetmap.org/search?format=json&polygon=1&addressdetails=1&q=' + query)
-        .then(result => result.json())
-        .then(parsedResult => {
-            setResultList(parsedResult);
-        });
-});
-
-function setResultList(parsedResult) {
-    resultList.innerHTML = "";
-    for (const marker of currentMarkers) {
-        map.removeLayer(marker);
-    }
-    currentMarkers.length = 0;
-    const uniqueResults = getUniqueResults(parsedResult);
-    map.flyTo(new L.LatLng(20.13847, 1.40625), 2);
-    for (const result of uniqueResults) {
-        const li = document.createElement('li');
-        li.classList.add('list-group-item', 'list-group-item-action');
-        li.innerHTML = JSON.stringify({
-            displayName: result.display_name,
-            lat: result.lat,
-            lon: result.lon
-        }, undefined, 6);
-        li.addEventListener('click', (event) => {
-            for(const child of resultList.children) {
-                child.classList.remove('active');
-            }
-            event.target.classList.add('active');
-            const clickedData = JSON.parse(event.target.innerHTML);
-            const position = new L.LatLng(clickedData.lat, clickedData.lon);
-            map.flyTo(position, 10);
-        });
-        const position = new L.LatLng(result.lat, result.lon);
-        currentMarkers.push(new L.marker(position).addTo(map));
-        resultList.appendChild(li);
-    }
-}
-
-function getUniqueResults(results) {
-    const seen = new Set();
-    return results.filter(result => {
-        const key = `${result.lat},${result.lon}`;
-        if (seen.has(key)) {
-            return false;
-        } else {
-            seen.add(key);
-            return true;
+<!DOCTYPE html><html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map with Disasters</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />   
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        #map {
+            width: 100%;
+            height: 1000px;
         }
-    });
-}
-</script>
+        #status-bar {
+            height: 10px;
+            background-color: #ffffff;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+        }
+        .container-fluid {
+            display: flex;  
+        }
+        .map-container, .table-container {
+            padding: 10px;
+        }
+        .map-container {
+            flex: 2;
+        }
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            height: 1000px;
+        }
+        th.sortable:hover {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+        }
+        .pagination button {
+            margin: 0 5px;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            background-color: #f5f5f5;
+        }
+        .pagination button:disabled {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+        }
+        .apiu-container {
+            padding: 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+    </style></head><body>    
+    <div class="container-fluid">
+        <div class="map-container">
+            <div id="map"></div>
+            <div id="status-bar">위도 : [N/A], 경도 : [N/A]</div>
+        </div>
+        <div class="table-container">
+            <div class="apiu-container">APIU Name: <span id="apiu-name">Fetching...</span></div>
+            <div class="info-bar">
+                <div id="record-count">Total Records: 0</div>
+                <div id="current-page">Page: 1</div>
+            </div>
+            <table class="table table-striped">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>No</th>
+                        <th class="sortable" data-sort="magnitude">Magnitude</th>
+                        <th class="sortable" data-sort="location">Location</th>
+                        <th class="sortable" data-sort="time">Time</th>
+                    </tr>
+                </thead>
+                <tbody id="earthquake-table-body">
+                </tbody>
+            </table>
+            <div class="pagination">
+                <button id="prev-page" disabled>Previous</button>
+                <button id="next-page">Next</button>
+            </div>
+        </div>
+    </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>    
+    <script>
+        var map = L.map('map').setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            minZoom: 2,
+            maxZoom: 18,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        var miniMapLayer = new L.TileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            minZoom: 0,
+            maxZoom: 13
+        });
+
+
+        // Define a smaller icon for the marker
+        var customIcon = L.icon({
+            iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+            iconSize: [15, 25], // size of the icon
+            iconAnchor: [12, 22], // point of the icon which will correspond to marker's location
+            popupAnchor: [1, -34] // point from which the popup should open relative to the iconAnchor
+        });
+
+        new L.Control.MiniMap(miniMapLayer, {
+            toggleDisplay: true,
+            minimized: true,
+            position: 'bottomright',
+            zoomLevelFixed: 5,
+            width: 150,
+            height: 150
+        }).addTo(map);
+
+        var geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false
+        })
+        .on('markgeocode', function(e) {
+            var bbox = e.geocode.bbox;
+            var poly = L.polygon([
+                bbox.getSouthEast(),
+                bbox.getNorthEast(),
+                bbox.getNorthWest(),
+                bbox.getSouthWest()
+            ]).addTo(map);
+            map.fitBounds(poly.getBounds());
+        })
+        .addTo(map);
+
+        var searchBox = geocoder._container.querySelector('input');
+        
+        document.addEventListener('click', function(event) {
+            if (!geocoder._container.contains(event.target) && searchBox) {
+                searchBox.value = '';
+            }
+        });
+
+        var earthquakes = [];
+        var currentPage = 1;
+        var recordsPerPage = 10;
+        var currentSort = { column: null, ascending: true };
+
+        // Fetch and display API name
+        var apiuName = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
+        document.getElementById('apiu-name').textContent = apiuName;
+
+        fetch(apiuName)
+            .then(response => response.json())
+            .then(data => {
+                var tableBody = document.getElementById('earthquake-table-body');
+                var recordCount = document.getElementById('record-count');
+
+                data.features.forEach((earthquake, index) => {
+                    var coords = earthquake.geometry.coordinates;
+                    var magnitude = earthquake.properties.mag;
+                    var place = earthquake.properties.place;
+                    var time = new Date(earthquake.properties.time).toLocaleString();
+
+                    var marker = L.marker([coords[1], coords[0]], { icon: customIcon }).addTo(map);
+                    marker.bindPopup(`<b>Magnitude:</b> ${magnitude}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
+
+                    earthquakes.push({
+                        no: index + 1,
+                        magnitude: magnitude,
+                        location: place,
+                        time: time,
+                        coords: [coords[1], coords[0]],
+                        marker: marker
+                    });
+                });
+
+                recordCount.textContent = `Total Records: ${earthquakes.length}`;
+                renderTable();
+            })
+            .catch(error => console.error('Error fetching earthquake data:', error));
+
+        function renderTable() {
+            var tableBody = document.getElementById('earthquake-table-body');
+            var startIndex = (currentPage - 1) * recordsPerPage;
+            var endIndex = startIndex + recordsPerPage;
+            var currentRecords = earthquakes.slice(startIndex, endIndex);
+
+            while (tableBody.firstChild) {
+                tableBody.removeChild(tableBody.firstChild);
+            }
+
+            currentRecords.forEach(earthquake => {
+                var row = document.createElement('tr');
+                row.innerHTML = `<td>${earthquake.no}</td><td>${earthquake.magnitude}</td><td>${earthquake.location}</td><td>${earthquake.time}</td>`;
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                    map.setView(earthquake.coords, 8);
+                    earthquake.marker.openPopup();
+                });
+
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('current-page').textContent = `Page: ${currentPage}`;
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = endIndex >= earthquakes.length;
+        }
+
+        function sortTableBy(column) {
+            currentSort.ascending = (currentSort.column === column) ? !currentSort.ascending : true;
+            currentSort.column = column;
+
+            earthquakes.sort((a, b) => {
+                if (a[column] < b[column]) return currentSort.ascending ? -1 : 1;
+                if (a[column] > b[column]) return currentSort.ascending ? 1 : -1;
+                return 0;
+            });
+
+            renderTable();
+        }
+
+        document.querySelectorAll('th.sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                var sortAttribute = header.getAttribute('data-sort');
+                sortTableBy(sortAttribute);
+            });
+        });
+
+        document.getElementById('prev-page').addEventListener('click', () => {
+            currentPage--;
+            renderTable();
+        });
+
+        document.getElementById('next-page').addEventListener('click', () => {
+            currentPage++;
+            renderTable();
+        });
+
+        map.on('mousemove', function(e) {
+            var lat = e.latlng.lat.toFixed(5);
+            var lng = e.latlng.lng.toFixed(5);
+            document.getElementById('status-bar').textContent = `위도: [${lat}], 경도: [${lng}]`;
+        });
+    </script>
 </body>
 </html>
