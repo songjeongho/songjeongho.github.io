@@ -162,7 +162,7 @@
         // Fetch and display API name
         var apiuName = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
         document.getElementById('apiu-name').textContent = apiuName;
-
+    
         fetch(apiuName)
             .then(response => response.json())
             .then(data => {
