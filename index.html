@@ -10,10 +10,11 @@
     <!-- Leaflet MarkerCluster CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />   
 
     <style>
         #map {
-            height: 600px;
+            height: 800px;
             width: 100%;
         }
     </style>
@@ -23,16 +24,56 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>    
+    <script src="Leaflet.CountrySelect.js"></script>
+
     <!-- Leaflet MarkerCluster JS -->
     <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script>
         // Create the map
-        var map = L.map('map').setView([37.7749, -122.4194], 5); // Centered on San Francisco, zoom level 5
+        var map = L.map('map').setView([37.7749, -100.4194], 2); // Centered on San Francisco, zoom level 5
 
         // Add OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+
+        var geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false
+        })
+
+        .on('markgeocode', function(e) {
+            var bbox = e.geocode.bbox;
+            var poly = L.polygon([
+                bbox.getSouthEast(),
+                bbox.getNorthEast(),
+                bbox.getNorthWest(),
+                bbox.getSouthWest()
+            ]).addTo(map);
+            map.fitBounds(poly.getBounds());
+        })
+        .addTo(map);
+
+        var select = L.countrySelect({exclude:""});
+			select.addTo(map);
+			
+			select.on('change', function(e){
+				if (e.feature === undefined){ //Do nothing on title
+					return;
+				}
+
+				var country = L.geoJson(e.feature);
+
+				if (this.previousCountry != null){
+					map.removeLayer(this.previousCountry);
+				}
+
+				this.previousCountry = country;
+
+				map.addLayer(country);
+				map.fitBounds(country.getBounds());
+                				
+			});
 
         // Create a MarkerClusterGroup
         var markers = L.markerClusterGroup();
