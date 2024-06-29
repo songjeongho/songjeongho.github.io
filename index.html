@@ -1,110 +1,187 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-    <title>USGS Earthquake Data with Leaflet MarkerCluster</title>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <!-- Leaflet MarkerCluster CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
-     
-
+    <title>USGS 지진 정보 지도</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.Default.css" />
     <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+        }
+        .container-fluid {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .map-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
         #map {
-            height: 800px;
             width: 100%;
+            height: 100%;
+            border-radius: 10px;
+        }
+        #status-bar {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        #country-select {
+            width: 200px;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
+    <div class="container-fluid">
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+        <div id="status-bar" class="row align-items-center">
+            <div class="col">
+                <span class="fw-bold">USGS 지진 정보 지도</span>
+            </div>
+            <div class="col-auto me-2">
+                <select id="country-select" class="form-select form-select-sm">
+                    <option value="">모든 국가</option>
+                </select>
+            </div>
+            <div class="col-auto" id="coordinates">
+                위도: 0.0000, 경도: 0.0000
+            </div>
+        </div>
+    </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>    
-    <script src="Leaflet.CountrySelect.js"></script>
-
-    <!-- Leaflet MarkerCluster JS -->
-    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/leaflet.markercluster.js"></script>
     <script>
-        // Create the map
-        var map = L.map('map').setView([37.7749, -100.4194], 2); // Centered on San Francisco, zoom level 5
+        const map = L.map('map').setView([0, 0], 2);
+        const coordinatesDisplay = document.getElementById('coordinates');
+        const countrySelect = document.getElementById('country-select');
+        let markers = L.markerClusterGroup();
+        let allMarkers = [];
+        let geojsonLayer;
 
-        // Add OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        var geocoder = L.Control.geocoder({
-            defaultMarkGeocode: false
-        })
+        map.on('mousemove', (e) => {
+            const { lat, lng } = e.latlng;
+            coordinatesDisplay.textContent = `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+        });
 
-        .on('markgeocode', function(e) {
-            var bbox = e.geocode.bbox;
-            var poly = L.polygon([
-                bbox.getSouthEast(),
-                bbox.getNorthEast(),
-                bbox.getNorthWest(),
-                bbox.getSouthWest()
-            ]).addTo(map);
-            map.fitBounds(poly.getBounds());
-        })
-        .addTo(map);
+        async function fetchEarthquakes() {
+            const response = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson');
+            const data = await response.json();
+            return data.features;
+        }
 
-        var select = L.countrySelect({exclude:""});
-			select.addTo(map);
-			
-			select.on('change', function(e){
-				if (e.feature === undefined){ //Do nothing on title
-					return;
-				}
+        function createMarker(earthquake) {
+            const { coordinates } = earthquake.geometry;
+            const { mag, place } = earthquake.properties;
+            const marker = L.marker([coordinates[1], coordinates[0]]);
+            marker.bindPopup(`<strong>규모:</strong> ${mag}<br><strong>위치:</strong> ${place}`);
+            marker.country = place.split(', ').pop();
+            return marker;
+        }
 
-				var country = L.geoJson(e.feature);
-
-				if (this.previousCountry != null){
-					map.removeLayer(this.previousCountry);
-				}
-
-				this.previousCountry = country;
-
-				map.addLayer(country);
-				map.fitBounds(country.getBounds());
-                				
-			});
-
-        // Create a MarkerClusterGroup
-        var markers = L.markerClusterGroup();
-
-        // USGS Earthquake data API endpoint (past 7 days of earthquakes)
-        var earthquakeUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
-
-        // Fetch the earthquake data
-        fetch(earthquakeUrl)
-            .then(response => response.json())
-            .then(data => {
-                // Loop through each earthquake feature
-                data.features.forEach(feature => {
-                    var coords = feature.geometry.coordinates;
-                    var magnitude = feature.properties.mag;
-                    var place = feature.properties.place;
-
-                    // Create a marker and bind a popup with the earthquake info
-                    var marker = L.marker([coords[1], coords[0]])
-                        .bindPopup(`<b>Magnitude:</b> ${magnitude}<br><b>Location:</b> ${place}`);
-
-                    // Add the marker to the MarkerClusterGroup
-                    markers.addLayer(marker);
-                });
-
-                // Add the MarkerClusterGroup to the map
-                map.addLayer(markers);
-            })
-            .catch(error => {
-                console.error('Error fetching earthquake data:', error);
+        function updateCountrySelect(countries) {
+            const sortedCountries = [...new Set(countries)].sort();
+            sortedCountries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
             });
+        }
+
+        function filterMarkersByCountry(country) {
+            markers.clearLayers();
+            const filteredMarkers = country
+                ? allMarkers.filter(marker => marker.country === country)
+                : allMarkers;
+            markers.addLayers(filteredMarkers);
+        }
+
+        async function loadGeoJSON() {
+            const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+            return await response.json();
+        }
+
+        function highlightCountry(countryName) {
+            if (geojsonLayer) {
+                map.removeLayer(geojsonLayer);
+            }
+
+            if (!countryName) {
+                map.setView([0, 0], 2);
+                return;
+            }
+
+            const countryFeature = geoJSONData.features.find(feature => feature.properties.ADMIN === countryName);
+            
+            if (countryFeature) {
+                geojsonLayer = L.geoJSON(countryFeature, {
+                    style: {
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7,
+                        fillColor: '#fd8d3c'
+                    }
+                }).addTo(map);
+
+                map.fitBounds(geojsonLayer.getBounds());
+            } else {
+                console.log(`Country not found: ${countryName}`);
+            }
+        }
+
+        let geoJSONData;
+
+        async function initMap() {
+            const earthquakes = await fetchEarthquakes();
+            const countries = [];
+
+            allMarkers = earthquakes.map(eq => {
+                const marker = createMarker(eq);
+                countries.push(marker.country);
+                return marker;
+            });
+
+            markers.addLayers(allMarkers);
+            map.addLayer(markers);
+
+            updateCountrySelect(countries);
+
+            geoJSONData = await loadGeoJSON();
+
+            countrySelect.addEventListener('change', (e) => {
+                const selectedCountry = e.target.value;
+                filterMarkersByCountry(selectedCountry);
+                highlightCountry(selectedCountry);
+            });
+        }
+
+        initMap();
     </script>
 </body>
 </html>
