@@ -172,6 +172,8 @@
                 <div class="popup-info"><span class="popup-label">Magnitude:</span> <span class="popup-value">${mag}</span></div>
                 <div class="popup-info"><span class="popup-label">Location:</span> <span class="popup-value">${place}</span></div>
                 <div class="popup-info"><span class="popup-label">Region:</span> <span class="popup-value">${region}</span></div>
+                <div class="popup-info"><span class="popup-label">Latitude:</span> <span class="popup-value">${coordinates[1].toFixed(4)}</span></div>
+                <div class="popup-info"><span class="popup-label">Longitude:</span> <span class="popup-value">${coordinates[0].toFixed(4)}</span></div>
                 <div class="popup-info"><span class="popup-label">Time:</span> <span class="popup-value">${new Date(time).toLocaleString()}</span></div>
                 <button class="popup-close" onclick="this.closest('.leaflet-popup-content-wrapper').style.display='none'">Close</button>
             `, {closeButton: false});
