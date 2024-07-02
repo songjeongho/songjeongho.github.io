@@ -5,208 +5,230 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>USGS 지진 지도</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.Default.css" />
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; }
-        #status-bar { 
-            position: fixed; 
-            bottom: 0; 
-            left: 0; 
-            right: 0; 
-            background: rgba(255,255,255,0.8); 
-            padding: 10px; 
-            display: flex; 
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: calc(100% - 60px);
+            width: 100%;
+        }
+        #controls {
+            height: 60px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            display: flex;
+            align-items: center;
             justify-content: space-between;
         }
-        .leaflet-popup-content-wrapper {
-            background: rgba(255,255,255,0.9);
-            color: #333;
-            border-radius: 10px;
-            padding: 10px;
-            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
-        }
-        .leaflet-popup-content {
-            margin: 13px 19px;
-            line-height: 1.4;
-        }
-        .leaflet-popup-tip {
-            display: none;
-        }
-        .close-button {
-            display: inline-block;
+        #status-bar {
+            position: absolute;
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            background-color: rgba(255, 255, 255, 0.8);
             padding: 5px 10px;
-            background-color: #f44336;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        .custom-popup {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            padding: 15px;
+            max-width: 300px;
+        }
+        .custom-popup h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .custom-popup p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .custom-popup .close-btn {
+            display: block;
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #007bff;
             color: white;
-            text-align: center;
+            border: none;
+            border-radius: 3px;
             cursor: pointer;
-            border-radius: 5px;
         }
-        .search-container {
-            position: absolute;
-            top: 10px;
-            left: 50px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .magnitude-filter {
-            position: absolute;
-            top: 10px;
-            right: 50px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        select, button {
+            margin-right: 10px;
+            padding: 5px;
         }
     </style>
 </head>
 <body>
+    <div id="controls">
+        <div>
+            <select id="country-select">
+                <option value="">모든 국가</option>
+            </select>
+            <select id="magnitude-select">
+                <option value="">모든 규모</option>
+                <option value="1">1.0+</option>
+                <option value="2">2.0+</option>
+                <option value="3">3.0+</option>
+                <option value="4">4.0+</option>
+                <option value="5">5.0+</option>
+            </select>
+            <button id="reset-btn">초기화</button>
+        </div>
+        <div id="coordinates"></div>
+    </div>
     <div id="map"></div>
-    <div id="status-bar">
-        <span>마우스를 지도 위에 올려놓으세요</span>
-        <span id="coordinates"></span>
-    </div>
-    <div class="search-container">
-        <select id="region-select">
-            <option value="">지역 선택</option>
-            <option value="us">미국</option>
-            <option value="jp">일본</option>
-            <option value="kr">한국</option>
-        </select>
-        <button id="search-button">검색</button>
-    </div>
-    <div class="magnitude-filter">
-        <label for="magnitude">최소 규모:</label>
-        <input type="number" id="magnitude" min="0" max="10" step="0.1" value="0">
-        <button id="filter-button">필터</button>
-    </div>
-    <button id="reset-button" style="position: absolute; bottom: 50px; right: 10px; z-index: 1000;">초기화</button>
+    <div id="status-bar"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/leaflet.markercluster.js"></script>
     <script>
-        // 지도 초기화
         const map = L.map('map').setView([0, 0], 2);
+        const markers = L.markerClusterGroup();
+        const statusBar = document.getElementById('status-bar');
+        const countrySelect = document.getElementById('country-select');
+        const magnitudeSelect = document.getElementById('magnitude-select');
+        const resetBtn = document.getElementById('reset-btn');
+        const coordinatesDisplay = document.getElementById('coordinates');
+        let allMarkers = [];
+        let countries = new Set();
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // 마커 클러스터 그룹 초기화
-        const markers = L.markerClusterGroup();
-
-        // 지진 아이콘 정의
         const earthquakeIcon = L.icon({
             iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
             iconSize: [25, 41],
             iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-            shadowSize: [41, 41]
+            popupAnchor: [1, -34]
         });
 
-        // USGS API에서 지진 데이터 가져오기
-        async function fetchEarthquakeData() {
-            try {
-                const response = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson');
-                const data = await response.json();
-                return data.features;
-            } catch (error) {
-                console.error('지진 데이터를 가져오는 중 오류 발생:', error);
-                alert('지진 데이터를 불러오는 데 실패했습니다. 다시 시도해 주세요.');
-                return [];
-            }
-        }
+        function fetchEarthquakeData() {
+            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    data.features.forEach(feature => {
+                        const coords = feature.geometry.coordinates;
+                        const magnitude = feature.properties.mag;
+                        const place = feature.properties.place;
+                        const country = place.split(', ').pop();
+                        countries.add(country);
 
-        // 지진 데이터로 마커 생성
-        function createMarkers(earthquakes) {
-            markers.clearLayers();
-            earthquakes.forEach(eq => {
-                const coords = eq.geometry.coordinates;
-                const marker = L.marker([coords[1], coords[0]], {icon: earthquakeIcon});
-                
-                marker.bindPopup(() => {
-                    const popupContent = `
-                        <h3>지진 정보</h3>
-                        <p>규모: ${eq.properties.mag}</p>
-                        <p>위치: ${eq.properties.place}</p>
-                        <p>시간: ${new Date(eq.properties.time).toLocaleString()}</p>
-                        <p>위도: ${coords[1]}</p>
-                        <p>경도: ${coords[0]}</p>
-                        <button class="close-button">닫기</button>
-                    `;
-                    const popup = L.popup({closeButton: false})
-                        .setContent(popupContent);
-                    
-                    setTimeout(() => {
-                        const closeButton = popup.getElement().querySelector('.close-button');
-                        closeButton.addEventListener('click', () => {
-                            map.closePopup();
+                        const marker = L.marker([coords[1], coords[0]], { icon: earthquakeIcon });
+                        marker.bindPopup(createPopupContent(feature));
+                        markers.addLayer(marker);
+                        allMarkers.push({
+                            marker: marker,
+                            magnitude: magnitude,
+                            country: country
                         });
-                    }, 0);
-                    
-                    return popup;
+                    });
+
+                    map.addLayer(markers);
+                    updateCountrySelect();
+                })
+                .catch(error => {
+                    console.error('Error fetching earthquake data:', error);
+                    alert('지진 데이터를 가져오는 중 오류가 발생했습니다. 다시 시도해 주세요.');
                 });
-                
-                markers.addLayer(marker);
-            });
-            map.addLayer(markers);
         }
 
-        // 초기 데이터 로드
-        fetchEarthquakeData().then(createMarkers);
+        function createPopupContent(feature) {
+            const { mag, place, time, url } = feature.properties;
+            const [longitude, latitude, depth] = feature.geometry.coordinates;
+            const date = new Date(time).toLocaleString();
 
-        // 상태 바 업데이트
-        map.on('mousemove', (e) => {
-            document.getElementById('coordinates').textContent = `위도: ${e.latlng.lat.toFixed(4)}, 경도: ${e.latlng.lng.toFixed(4)}`;
-        });
+            return `
+                <div class="custom-popup">
+                    <h3>규모 ${mag} 지진</h3>
+                    <p><strong>위치:</strong> ${place}</p>
+                    <p><strong>시간:</strong> ${date}</p>
+                    <p><strong>위도:</strong> ${latitude.toFixed(4)}</p>
+                    <p><strong>경도:</strong> ${longitude.toFixed(4)}</p>
+                    <p><strong>깊이:</strong> ${depth} km</p>
+                    <p><a href="${url}" target="_blank">자세한 정보</a></p>
+                    <button class="close-btn">닫기</button>
+                </div>
+            `;
+        }
 
-        // 지역 검색 기능
-        document.getElementById('search-button').addEventListener('click', () => {
-            const region = document.getElementById('region-select').value;
-            let center, zoom;
-            switch(region) {
-                case 'us':
-                    center = [39.8283, -98.5795];
-                    zoom = 4;
-                    break;
-                case 'jp':
-                    center = [36.2048, 138.2529];
-                    zoom = 5;
-                    break;
-                case 'kr':
-                    center = [35.9078, 127.7669];
-                    zoom = 7;
-                    break;
-                default:
-                    center = [0, 0];
-                    zoom = 2;
-            }
-            map.flyTo(center, zoom, {
-                animate: true,
-                duration: 2
+        function updateCountrySelect() {
+            const sortedCountries = Array.from(countries).sort();
+            sortedCountries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
             });
+        }
+
+        function filterMarkers() {
+            const selectedCountry = countrySelect.value;
+            const selectedMagnitude = parseFloat(magnitudeSelect.value);
+
+            markers.clearLayers();
+
+            allMarkers.forEach(({ marker, magnitude, country }) => {
+                if ((!selectedCountry || country === selectedCountry) &&
+                    (!selectedMagnitude || magnitude >= selectedMagnitude)) {
+                    markers.addLayer(marker);
+                }
+            });
+        }
+
+        function resetMap() {
+            map.setView([0, 0], 2, { animate: true });
+            countrySelect.value = '';
+            magnitudeSelect.value = '';
+            filterMarkers();
+        }
+
+        map.on('mousemove', (e) => {
+            const { lat, lng } = e.latlng;
+            coordinatesDisplay.textContent = `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
         });
 
-        // 규모 필터 기능
-        document.getElementById('filter-button').addEventListener('click', async () => {
-            const minMagnitude = parseFloat(document.getElementById('magnitude').value);
-            const earthquakes = await fetchEarthquakeData();
-            const filteredEarthquakes = earthquakes.filter(eq => eq.properties.mag >= minMagnitude);
-            createMarkers(filteredEarthquakes);
+        countrySelect.addEventListener('change', () => {
+            filterMarkers();
+            const selectedCountry = countrySelect.value;
+            if (selectedCountry) {
+                const marker = allMarkers.find(m => m.country === selectedCountry);
+                if (marker) {
+                    map.flyTo(marker.marker.getLatLng(), 6, { animate: true });
+                }
+            }
         });
 
-        // 초기화 버튼
-        document.getElementById('reset-button').addEventListener('click', () => {
-            map.setView([0, 0], 2);
-            fetchEarthquakeData().then(createMarkers);
-            document.getElementById('magnitude').value = 0;
+        magnitudeSelect.addEventListener('change', filterMarkers);
+        resetBtn.addEventListener('click', resetMap);
+
+        fetchEarthquakeData();
+
+        // 팝업 닫기 버튼 이벤트 처리
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('close-btn')) {
+                const popup = e.target.closest('.leaflet-popup');
+                if (popup) {
+                    map.closePopup(popup._leaflet_id);
+                }
+            }
         });
 
+        // 에러 처리
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error('An error occurred:', message, source, lineno, colno, error);
+            alert('오류가 발생했습니다. 콘솔을 확인해 주세요.');
+            return true;
+        };
     </script>
 </body>
 </html>
