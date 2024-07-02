@@ -244,7 +244,8 @@
             // 국가 선택 옵션 업데이트
             var select = document.getElementById('countrySelect');
             select.innerHTML = '<option value="">국가 선택</option>';
-            countries.forEach(country => {
+            var sortedCountries = Array.from(countries).sort((a, b) => a.localeCompare(b, 'ko'));
+            sortedCountries.forEach(country => {
                 var option = document.createElement('option');
                 option.value = country;
                 option.textContent = country;
