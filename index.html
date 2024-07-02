@@ -344,14 +344,14 @@
 
         // 클러스터 클릭 이벤트
         markers.on('clusterclick', function(a) {
-            var bounds = a.layer.getBounds();
-            map.flyToBounds(bounds, {
-                animate: true,
-                duration: 1.5
-            });
-            // 국가 선택 초기화
-            document.getElementById('countrySelect').value = '';
-        });
-    </script>
-</body>
-</html>
+            var cluster = a.layer;
+            var bottomCluster = cluster;
+
+            while (bottomCluster._childClusters.length === 1) {
+                bottomCluster = bottomCluster._childClusters[0];
+            }
+
+            if (bottomCluster._zoom === map.getMaxZoom() && bottomCluster._childCount === cluster._childCount) {
+                // 최하위 클러스터인 경우, 개별 마커들을 애니메이션으로 펼칩니다.
+                var markers = bottomCluster.getAllChildMarkers();
+                var latLngs = markers.map(function(marker
