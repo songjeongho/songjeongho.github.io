@@ -1,283 +1,200 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USGS Earthquake Map</title>
+    <title>USGS 지진 지도</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-        #controls {
-            background-color: #f0f0f0;
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+        .info-box {
             padding: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-width: 300px;
         }
-        #country-select {
-            margin-right: 10px;
-            padding: 5px;
-        }
-        #search-button {
+        .info-box h4 { margin: 0 0 5px; }
+        .info-box p { margin: 0; }
+        .close-btn {
+            display: block;
+            margin-top: 10px;
             padding: 5px 10px;
-        }
-        #map-container {
-            flex-grow: 1;
-            margin: 10px;
-            position: relative;
-        }
-        #map { 
-            height: 100%; 
-        }
-        #status-bar { 
-            background-color: #f0f0f0; 
-            padding: 10px; 
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        #loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            font-weight: bold;
-            z-index: 1000;
-        }
-        .reset-view-btn {
-            padding: 5px;
-            font-size: 12px;
-            font-weight: bold;
-            background-color: white;
-            border: 2px solid rgba(0,0,0,0.2);
-            border-radius: 4px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 3px;
             cursor: pointer;
         }
-        .reset-view-btn:hover {
-            background-color: #f4f4f4;
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        select, button {
+            margin: 5px 0;
+            padding: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="controls">
+    <div id="map"></div>
+    <div class="controls">
         <select id="country-select">
-            <option value="">All Countries</option>
+            <option value="">모든 국가</option>
         </select>
-        <button id="search-button" onclick="searchEarthquakes()">Search</button>
+        <select id="magnitude-select">
+            <option value="">모든 규모</option>
+            <option value="1">1.0+</option>
+            <option value="2">2.0+</option>
+            <option value="3">3.0+</option>
+            <option value="4">4.0+</option>
+            <option value="5">5.0+</option>
+        </select>
+        <button id="reset-btn">초기화</button>
     </div>
-    <div id="map-container">
-        <div id="map"></div>
-        <div id="loading-overlay">Loading...</div>
-    </div>
-    <div id="status-bar">
-        <span id="status">Status: Idle</span>
+    <div class="status-bar">
         <span id="coordinates"></span>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     <script>
-        let map = L.map('map').setView([0, 0], 2);
+        const map = L.map('map').setView([0, 0], 2);
+        const markers = L.markerClusterGroup();
+        let allMarkers = [];
+        let initialView;
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Add custom Reset View control
-        L.Control.ResetView = L.Control.extend({
-            onAdd: function(map) {
-                var btn = L.DomUtil.create('button', 'reset-view-btn');
-                btn.innerHTML = 'Reset View';
-                btn.onclick = resetView;
-                return btn;
-            }
+        const earthquakeIcon = L.icon({
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
         });
-        L.control.resetView = function(opts) {
-            return new L.Control.ResetView(opts);
-        }
-        L.control.resetView({ position: 'topleft' }).addTo(map);
-
-        let statusSpan = document.getElementById('status');
-        let coordinatesSpan = document.getElementById('coordinates');
-        let countrySelect = document.getElementById('country-select');
-        let loadingOverlay = document.getElementById('loading-overlay');
-        let markers = L.markerClusterGroup();
-        map.addLayer(markers);
-
-        let initialView = {
-            center: [0, 0],
-            zoom: 2
-        };
-
-        let allEarthquakes = [];
-
-        function updateStatus(message) {
-            statusSpan.textContent = message;
-        }
-
-        function updateCoordinates(lat, lng) {
-            coordinatesSpan.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
-        }
-
-        map.on('mousemove', function(e) {
-            updateCoordinates(e.latlng.lat, e.latlng.lng);
-        });
-
-        function showLoading() {
-            loadingOverlay.style.display = 'flex';
-        }
-
-        function hideLoading() {
-            loadingOverlay.style.display = 'none';
-        }
 
         function fetchEarthquakes() {
-            showLoading();
-            updateStatus('Status: Fetching earthquake data...');
-            let url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson';
-
-            fetch(url)
+            fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson')
                 .then(response => response.json())
                 .then(data => {
-                    updateStatus('Status: Plotting earthquakes on map...');
-                    allEarthquakes = data.features;
-                    plotEarthquakes(allEarthquakes);
-                    populateCountrySelect(allEarthquakes);
-                    updateStatus('Status: Earthquake data loaded');
-                    hideLoading();
+                    processEarthquakeData(data.features);
                 })
-                .catch(error => {
-                    console.error('Error fetching earthquake data:', error);
-                    updateStatus('Status: Error fetching earthquake data');
-                    hideLoading();
-                });
+                .catch(error => console.error('Error:', error));
         }
 
-        function extractCountry(place) {
-            if (place.includes(', ')) {
-                let parts = place.split(', ');
-                return parts[parts.length - 1].trim();
-            }
-            return "Unknown";
-        }
-
-        function plotEarthquakes(earthquakes) {
-            markers.clearLayers();
-            
+        function processEarthquakeData(earthquakes) {
+            const countries = new Set();
             earthquakes.forEach(eq => {
-                let coords = eq.geometry.coordinates;
-                let marker = L.marker([coords[1], coords[0]]);
+                const coords = eq.geometry.coordinates;
+                const marker = L.marker([coords[1], coords[0]], {icon: earthquakeIcon});
                 
-                let country = extractCountry(eq.properties.place);
-                let popupContent = `
-                    <b>Magnitude:</b> ${eq.properties.mag}<br>
-                    <b>Location:</b> ${eq.properties.place}<br>
-                    <b>Time:</b> ${new Date(eq.properties.time).toLocaleString()}<br>
-                    <b>Country:</b> ${country}
-                `;
-                
-                marker.bindPopup(popupContent);
+                marker.bindPopup(createPopupContent(eq.properties));
                 markers.addLayer(marker);
+                allMarkers.push({
+                    marker: marker,
+                    magnitude: eq.properties.mag,
+                    country: eq.properties.place.split(', ').pop()
+                });
+
+                countries.add(eq.properties.place.split(', ').pop());
             });
 
-            if (countrySelect.value === "") {
-                map.fitBounds(markers.getBounds());
-                initialView = {
-                    center: map.getCenter(),
-                    zoom: map.getZoom()
-                };
-            }
+            map.addLayer(markers);
+            initialView = {
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            };
+
+            populateCountrySelect(Array.from(countries).sort());
         }
 
-        function populateCountrySelect(earthquakes) {
-            let countries = new Set();
-            earthquakes.forEach(eq => {
-                let country = extractCountry(eq.properties.place);
-                if (country !== "Unknown") {
-                    countries.add(country);
-                }
-            });
+        function createPopupContent(props) {
+            return `
+                <div class="info-box">
+                    <h4>${props.title}</h4>
+                    <p>규모: ${props.mag}</p>
+                    <p>위치: ${props.place}</p>
+                    <p>시간: ${new Date(props.time).toLocaleString()}</p>
+                    <p>위도: ${props.latitude}</p>
+                    <p>경도: ${props.longitude}</p>
+                    <button class="close-btn">닫기</button>
+                </div>
+            `;
+        }
 
-            let sortedCountries = Array.from(countries).sort();
-            countrySelect.innerHTML = '<option value="">All Countries</option>';
-            sortedCountries.forEach(country => {
-                let option = document.createElement('option');
+        function populateCountrySelect(countries) {
+            const select = document.getElementById('country-select');
+            countries.forEach(country => {
+                const option = document.createElement('option');
                 option.value = country;
                 option.textContent = country;
-                countrySelect.appendChild(option);
+                select.appendChild(option);
             });
         }
 
-        function getCountryCenter(earthquakes, country) {
-            let countryEarthquakes = earthquakes.filter(eq => extractCountry(eq.properties.place) === country);
-            if (countryEarthquakes.length === 0) return null;
-
-            let lats = countryEarthquakes.map(eq => eq.geometry.coordinates[1]);
-            let lngs = countryEarthquakes.map(eq => eq.geometry.coordinates[0]);
-            let avgLat = lats.reduce((a, b) => a + b) / lats.length;
-            let avgLng = lngs.reduce((a, b) => a + b) / lngs.length;
-
-            return [avgLat, avgLng];
-        }
-
-        function searchEarthquakes() {
-            let selectedCountry = countrySelect.value;
-            updateStatus(`Status: Searching earthquakes for ${selectedCountry || 'all countries'}...`);
-
-            let filteredEarthquakes = allEarthquakes.filter(eq => {
-                if (!selectedCountry) return true;
-                return extractCountry(eq.properties.place) === selectedCountry;
-            });
-
-            plotEarthquakes(filteredEarthquakes);
-            
-            if (selectedCountry) {
-                let center = getCountryCenter(allEarthquakes, selectedCountry);
-                if (center) {
-                    map.flyTo(center, 5, {
-                        animate: true,
-                        duration: 2 // 2 seconds
-                    });
-                }
-            } else {
-                map.flyTo(initialView.center, initialView.zoom, {
-                    animate: true,
-                    duration: 2 // 2 seconds
+        map.on('popupopen', e => {
+            const closeButton = e.popup._contentNode.querySelector('.close-btn');
+            if (closeButton) {
+                closeButton.addEventListener('click', () => {
+                    map.closePopup();
                 });
             }
-            
-            updateStatus(`Status: Showing earthquakes for ${selectedCountry || 'all countries'}`);
-        }
+        });
 
-        function resetView() {
-            updateStatus('Status: Resetting view...');
-            map.flyTo(initialView.center, initialView.zoom, {
-                animate: true,
-                duration: 3, // 3 seconds for smoother animation
-                easeLinearity: 0.5
+        map.on('mousemove', e => {
+            document.getElementById('coordinates').textContent = `위도: ${e.latlng.lat.toFixed(4)}, 경도: ${e.latlng.lng.toFixed(4)}`;
+        });
+
+        document.getElementById('country-select').addEventListener('change', filterMarkers);
+        document.getElementById('magnitude-select').addEventListener('change', filterMarkers);
+
+        function filterMarkers() {
+            const selectedCountry = document.getElementById('country-select').value;
+            const selectedMagnitude = parseFloat(document.getElementById('magnitude-select').value);
+
+            markers.clearLayers();
+
+            const filteredMarkers = allMarkers.filter(item => {
+                return (!selectedCountry || item.country === selectedCountry) &&
+                       (!selectedMagnitude || item.magnitude >= selectedMagnitude);
             });
 
-            setTimeout(() => {
-                countrySelect.value = "";
-                plotEarthquakes(allEarthquakes);
-                updateStatus('Status: View reset to initial position');
-            }, 3000); // Wait for the animation to finish before resetting
+            filteredMarkers.forEach(item => markers.addLayer(item.marker));
+
+            if (filteredMarkers.length > 0) {
+                const bounds = L.latLngBounds(filteredMarkers.map(item => item.marker.getLatLng()));
+                map.flyToBounds(bounds, {padding: [50, 50]});
+            }
         }
 
-        // Initial setup
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            document.getElementById('country-select').value = '';
+            document.getElementById('magnitude-select').value = '';
+            filterMarkers();
+            map.flyTo(initialView.center, initialView.zoom, {animate: true, duration: 1});
+        });
+
         fetchEarthquakes();
     </script>
 </body>
