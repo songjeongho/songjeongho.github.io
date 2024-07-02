@@ -1,19 +1,284 @@
-usgs에서 지진정보 API를 통해 호출하여 leatlet js 지도의 기능을 이용하여 지진지역을 마커로 표시하고 
-마커는 지진을 잘표현하는 아이콘으로 표시한다
-지진발생 지역을 클러스터링 하는 기능도 추가하여 만든다
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USGS Earthquake Map</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #controls {
+            background-color: #f0f0f0;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #country-select {
+            margin-right: 10px;
+            padding: 5px;
+        }
+        #search-button {
+            padding: 5px 10px;
+        }
+        #map-container {
+            flex-grow: 1;
+            margin: 10px;
+            position: relative;
+        }
+        #map { 
+            height: 100%; 
+        }
+        #status-bar { 
+            background-color: #f0f0f0; 
+            padding: 10px; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        .reset-view-btn {
+            padding: 5px;
+            font-size: 12px;
+            font-weight: bold;
+            background-color: white;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .reset-view-btn:hover {
+            background-color: #f4f4f4;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <select id="country-select">
+            <option value="">All Countries</option>
+        </select>
+        <button id="search-button" onclick="searchEarthquakes()">Search</button>
+    </div>
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="loading-overlay">Loading...</div>
+    </div>
+    <div id="status-bar">
+        <span id="status">Status: Idle</span>
+        <span id="coordinates"></span>
+    </div>
 
-마커를 클릭시 상세정보가 표시가 되는데 상세정보에는 지진관련 상세 정보와 위도 경도 정보를 표시한다
-상세정보 화면은 닫기 기능인  x 표시를 없애고 close 버튼을 추가하고 누르면 상세정보가 닫힌다 
-상세정보 이외를 눌러도. 상세정보 화면이 사라 지지 않도록 한다
-상세정보 화면은 css를 이용하여 가독성이 높게 개선한다
-상세정보를 눌러도 오류가 없도록 한다
+    <script>
+        let map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
 
+        // Add custom Reset View control
+        L.Control.ResetView = L.Control.extend({
+            onAdd: function(map) {
+                var btn = L.DomUtil.create('button', 'reset-view-btn');
+                btn.innerHTML = 'Reset View';
+                btn.onclick = resetView;
+                return btn;
+            }
+        });
+        L.control.resetView = function(opts) {
+            return new L.Control.ResetView(opts);
+        }
+        L.control.resetView({ position: 'topleft' }).addTo(map);
 
-상태바를 만들어서 마우스를 오버시 위도 경도가 상태바 우측에 표시된다. 지진이 발생한 국가별로 검색하여 지도를 표시하는 기능도 추가 한다 
-지역을 선택시. animation. 기능을 추가하여 자연스럽게 이동이 되도록 한다
+        let statusSpan = document.getElementById('status');
+        let coordinatesSpan = document.getElementById('coordinates');
+        let countrySelect = document.getElementById('country-select');
+        let loadingOverlay = document.getElementById('loading-overlay');
+        let markers = L.markerClusterGroup();
+        map.addLayer(markers);
 
-지진의 강도를 선택하여 마커를 표시 하는기능도 추가한다
-리턴 버튼도 만들어 초기 지도 위치와 zoom으로 돌아간다
-상세정보 닫기 버튼이 동작안하고 있는데 수정하고 지도아래 흰색선도 지워줘
+        let initialView = {
+            center: [0, 0],
+            zoom: 2
+        };
 
-전체적으로 자바스크립트로 작성하고 한개 파일로 만든다
+        let allEarthquakes = [];
+
+        function updateStatus(message) {
+            statusSpan.textContent = message;
+        }
+
+        function updateCoordinates(lat, lng) {
+            coordinatesSpan.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+        }
+
+        map.on('mousemove', function(e) {
+            updateCoordinates(e.latlng.lat, e.latlng.lng);
+        });
+
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+        function fetchEarthquakes() {
+            showLoading();
+            updateStatus('Status: Fetching earthquake data...');
+            let url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson';
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    updateStatus('Status: Plotting earthquakes on map...');
+                    allEarthquakes = data.features;
+                    plotEarthquakes(allEarthquakes);
+                    populateCountrySelect(allEarthquakes);
+                    updateStatus('Status: Earthquake data loaded');
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('Error fetching earthquake data:', error);
+                    updateStatus('Status: Error fetching earthquake data');
+                    hideLoading();
+                });
+        }
+
+        function extractCountry(place) {
+            if (place.includes(', ')) {
+                let parts = place.split(', ');
+                return parts[parts.length - 1].trim();
+            }
+            return "Unknown";
+        }
+
+        function plotEarthquakes(earthquakes) {
+            markers.clearLayers();
+            
+            earthquakes.forEach(eq => {
+                let coords = eq.geometry.coordinates;
+                let marker = L.marker([coords[1], coords[0]]);
+                
+                let country = extractCountry(eq.properties.place);
+                let popupContent = `
+                    <b>Magnitude:</b> ${eq.properties.mag}<br>
+                    <b>Location:</b> ${eq.properties.place}<br>
+                    <b>Time:</b> ${new Date(eq.properties.time).toLocaleString()}<br>
+                    <b>Country:</b> ${country}
+                `;
+                
+                marker.bindPopup(popupContent);
+                markers.addLayer(marker);
+            });
+
+            if (countrySelect.value === "") {
+                map.fitBounds(markers.getBounds());
+                initialView = {
+                    center: map.getCenter(),
+                    zoom: map.getZoom()
+                };
+            }
+        }
+
+        function populateCountrySelect(earthquakes) {
+            let countries = new Set();
+            earthquakes.forEach(eq => {
+                let country = extractCountry(eq.properties.place);
+                if (country !== "Unknown") {
+                    countries.add(country);
+                }
+            });
+
+            let sortedCountries = Array.from(countries).sort();
+            countrySelect.innerHTML = '<option value="">All Countries</option>';
+            sortedCountries.forEach(country => {
+                let option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
+            });
+        }
+
+        function getCountryCenter(earthquakes, country) {
+            let countryEarthquakes = earthquakes.filter(eq => extractCountry(eq.properties.place) === country);
+            if (countryEarthquakes.length === 0) return null;
+
+            let lats = countryEarthquakes.map(eq => eq.geometry.coordinates[1]);
+            let lngs = countryEarthquakes.map(eq => eq.geometry.coordinates[0]);
+            let avgLat = lats.reduce((a, b) => a + b) / lats.length;
+            let avgLng = lngs.reduce((a, b) => a + b) / lngs.length;
+
+            return [avgLat, avgLng];
+        }
+
+        function searchEarthquakes() {
+            let selectedCountry = countrySelect.value;
+            updateStatus(`Status: Searching earthquakes for ${selectedCountry || 'all countries'}...`);
+
+            let filteredEarthquakes = allEarthquakes.filter(eq => {
+                if (!selectedCountry) return true;
+                return extractCountry(eq.properties.place) === selectedCountry;
+            });
+
+            plotEarthquakes(filteredEarthquakes);
+            
+            if (selectedCountry) {
+                let center = getCountryCenter(allEarthquakes, selectedCountry);
+                if (center) {
+                    map.flyTo(center, 5, {
+                        animate: true,
+                        duration: 2 // 2 seconds
+                    });
+                }
+            } else {
+                map.flyTo(initialView.center, initialView.zoom, {
+                    animate: true,
+                    duration: 2 // 2 seconds
+                });
+            }
+            
+            updateStatus(`Status: Showing earthquakes for ${selectedCountry || 'all countries'}`);
+        }
+
+        function resetView() {
+            updateStatus('Status: Resetting view...');
+            map.flyTo(initialView.center, initialView.zoom, {
+                animate: true,
+                duration: 3, // 3 seconds for smoother animation
+                easeLinearity: 0.5
+            });
+
+            setTimeout(() => {
+                countrySelect.value = "";
+                plotEarthquakes(allEarthquakes);
+                updateStatus('Status: View reset to initial position');
+            }, 3000); // Wait for the animation to finish before resetting
+        }
+
+        // Initial setup
+        fetchEarthquakes();
+    </script>
+</body>
+</html>
