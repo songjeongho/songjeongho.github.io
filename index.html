@@ -15,9 +15,21 @@
             padding: 0;
             height: 100%;
             font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+        #filterControls {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         #map {
-            height: calc(100% - 30px);
+            flex-grow: 1;
             width: 100%;
         }
         .info-box {
@@ -56,57 +68,44 @@
         .close-btn:hover {
             background: #2980b9;
         }
-        #countrySelect, #magnitudeSelect, #resetButton, #searchButton {
-            position: absolute;
-            z-index: 1000;
-            padding: 8px;
+        #filterControls select, #filterControls button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
             border-radius: 4px;
-            border: 1px solid #ccc;
             font-size: 14px;
+            background-color: white;
         }
-        #countrySelect {
-            top: 10px;
-            right: 10px;
-            width: 200px;
+        #filterControls select {
+            min-width: 120px;
         }
-        #magnitudeSelect {
-            top: 50px;
-            right: 10px;
-            width: 200px;
+        #searchButton, #resetButton {
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            min-width: 80px;
+            border: none;
+            color: white;
+            text-shadow: 0 1px 2px rgba(58, 17, 243, 0.2);
         }
         #searchButton {
-            top: 90px;
-            right: 10px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background 0.3s;
+            background: #2ecc71;
         }
         #resetButton {
-            top: 130px;
-            right: 10px;
-            background: #f44336;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background 0.3s;
+            background: #e74c3c;
         }
-        #searchButton:hover, #resetButton:hover {
-            opacity: 0.8;
+        #searchButton:hover {
+            background: #27ae60;
+        }
+        #resetButton:hover {
+            background: #c0392b;
         }
         #status-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 30px;
-            background: #34495e;
+            background: rgba(52, 73, 94, 0.8);
             color: white;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 10px;
+            padding: 5px 10px;
             font-size: 13px;
         }
         #coordinates {
@@ -122,20 +121,22 @@
     </style>
 </head>
 <body>
+    <div id="filterControls">
+        <select id="countrySelect">
+            <option value="">국가 선택</option>
+        </select>
+        <select id="magnitudeSelect">
+            <option value="">지진 규모 선택</option>
+            <option value="1">1 이상</option>
+            <option value="2">2 이상</option>
+            <option value="3">3 이상</option>
+            <option value="4">4 이상</option>
+            <option value="5">5 이상</option>
+        </select>
+        <button id="searchButton">검색</button>
+        <button id="resetButton">초기화</button>
+    </div>
     <div id="map"></div>
-    <select id="countrySelect">
-        <option value="">국가 선택</option>
-    </select>
-    <select id="magnitudeSelect">
-        <option value="">지진 규모 선택</option>
-        <option value="1">1 이상</option>
-        <option value="2">2 이상</option>
-        <option value="3">3 이상</option>
-        <option value="4">4 이상</option>
-        <option value="5">5 이상</option>
-    </select>
-    <button id="searchButton">검색</button>
-    <button id="resetButton">초기 위치로</button>
     <div id="status-bar">
         <div id="status-message"></div>
         <div id="coordinates"></div>
@@ -146,8 +147,8 @@
         var map = L.map('map', {
             minZoom: 2,
             maxZoom: 17
-        }).setView([0, 0], 2);
-        var initialView = {center: [0, 0], zoom: 2};
+        }).setView([37, 127], 2);
+        var initialView = {center: [37, 127], zoom: 2};
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -157,10 +158,11 @@
         var markers = L.markerClusterGroup({
             spiderfyOnMaxZoom: false,
             showCoverageOnHover: false,
-            zoomToBoundsOnClick: false
+            zoomToBoundsOnClick: false,
+            disableClusteringAtZoom: 16
         });
 
-        // 지진 아이콘 정의 (SVG 형식의 지진 아이콘)
+        // 지진 아이콘 정의
         var earthquakeIcon = L.divIcon({
             html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
@@ -232,8 +234,6 @@
                     closeButton.addEventListener('click', function() {
                         map.closePopup();
                     });
-                    // 국가 선택 초기화
-                    document.getElementById('countrySelect').value = '';
                 });
 
                 markers.addLayer(marker);
@@ -263,6 +263,11 @@
         document.getElementById('searchButton').addEventListener('click', function() {
             var selectedCountry = document.getElementById('countrySelect').value;
             var selectedMagnitude = parseFloat(document.getElementById('magnitudeSelect').value);
+
+            if (selectedCountry === '' && isNaN(selectedMagnitude)) {
+                showStatusMessage('국가 또는 지진 규모를 선택해주세요.');
+                return;
+            }
 
             markers.clearLayers();
 
@@ -297,8 +302,6 @@
                         closeButton.addEventListener('click', function() {
                             map.closePopup();
                         });
-                        // 국가 선택 초기화
-                        document.getElementById('countrySelect').value = '';
                     });
 
                     filteredMarkers.push(marker);
@@ -312,7 +315,7 @@
                 var bounds = L.latLngBounds(filteredMarkers.map(m => m.getLatLng()));
                 map.flyToBounds(bounds, {
                     animate: true,
-                    duration: 1.5
+                    duration: 2.5
                 });
                 showStatusMessage(`${filteredMarkers.length}개의 지진 데이터를 찾았습니다.`);
             } else {
@@ -324,10 +327,10 @@
         document.getElementById('resetButton').addEventListener('click', function() {
             map.flyTo(initialView.center, initialView.zoom, {
                 animate: true,
-                duration: 2
+                duration: 2.5
             });
-            document.getElementById('countrySelect').value = ''; // 국가 선택 초기화
-            document.getElementById('magnitudeSelect').value = ''; // 규모 선택 초기화
+            document.getElementById('countrySelect').value = '';
+            document.getElementById('magnitudeSelect').value = '';
             updateMap();
             showStatusMessage('초기 위치로 돌아왔습니다.');
         });
@@ -345,8 +348,11 @@
                 animate: true,
                 duration: 1.5
             });
-            // 국가 선택 초기화
-            document.getElementById('countrySelect').value = '';
+        });
+
+        // 창 크기 변경 시 지도 크기 조정
+        window.addEventListener('resize', function() {
+            map.invalidateSize();
         });
     </script>
 </body>
