@@ -18,10 +18,32 @@
         }
         #map {
             width: 100%;
-            height: 100%;
+            height: calc(100% - 30px);
             position: absolute;
             top: 0;
             left: 0;
+        }
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30px;
+            background-color: #f0f0f0;
+            border-top: 1px solid #ccc;
+            padding: 5px;
+            box-sizing: border-box;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #coordinates {
+            flex: 1;
+        }
+        #message {
+            flex: 2;
+            text-align: center;
         }
         #info-panel {
             position: fixed;
@@ -134,30 +156,117 @@
         .legend .label {
             flex: 1;
         }
+        #open-window-btn {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #open-window-btn:hover {
+            background-color: #45a049;
+        }
+        .leaflet-control-reset {
+            background-color: #fff;
+            border: 2px solid rgba(0,0,0,0.2);
+            background-clip: padding-box;
+            border-radius: 5px;
+        }
+        .leaflet-control-reset a {
+            background-color: #fff;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            color: black;
+        }
+        .leaflet-control-reset img {
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+        }
+        .impact-circle {
+            stroke: #FF0000;
+            stroke-width: 2;
+            stroke-opacity: 0.5;
+            fill: #FF0000;
+            fill-opacity: 0.1;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="status-bar">
+        <div id="coordinates"></div>
+        <div id="message"></div>
+    </div>
     <div id="toggle-btn">&lt;</div>
     <div id="info-panel">
         <h2>지진 상세 정보</h2>
         <div id="earthquake-info"></div>
+        <button id="open-window-btn">새 창에서 보기</button>
     </div>
 
     <script>
         // 지도 초기화 (서울 중심)
-        var map = L.map('map').setView([37.5665, 126.9780], 6);
+        var map = L.map('map').setView([37.5665, 126.9780], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
+
+        // 상태바 업데이트 함수
+        function updateStatusBar(message) {
+            document.getElementById('message').textContent = message;
+        }
+
+        // 마우스 이동 시 좌표 업데이트
+        map.on('mousemove', function(e) {
+            document.getElementById('coordinates').textContent = `위도: ${e.latlng.lat.toFixed(6)}, 경도: ${e.latlng.lng.toFixed(6)}`;
+        });
+
+        // 초기화 컨트롤 추가 (이미지 사용)
+        L.Control.Reset = L.Control.extend({
+            onAdd: function(map) {
+                var container = L.DomUtil.create('div', 'leaflet-control-reset leaflet-bar leaflet-control');
+                var link = L.DomUtil.create('a', 'leaflet-control-reset-button', container);
+                link.href = '#';
+                link.title = '초기 위치로 돌아가기';
+
+                var img = L.DomUtil.create('img', '', link);
+                img.src = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png';
+                img.alt = '초기화';
+
+                L.DomEvent.on(link, 'click', L.DomEvent.stop)
+                    .on(link, 'click', function() {
+                        map.setView([37.5665, 126.9780], 3);
+                        updateStatusBar('지도가 초기 위치로 재설정되었습니다.');
+                    }, this);
+
+                return container;
+            }
+        });
+
+        L.control.reset = function(opts) {
+            return new L.Control.Reset(opts);
+        }
+
+        L.control.reset({ position: 'topleft' }).addTo(map);
 
         // 마커 클러스터 그룹 생성
         var markers = L.markerClusterGroup({
             chunkedLoading: true,
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
-            zoomToBoundsOnClick: true
+            zoomToBoundsOnClick: true,
+            removeOutsideVisibleBounds: true,
+            disableClusteringAtZoom: 8
         });
+
+        var currentEarthquakeInfo = null;
 
         // 지진 정보 패널 표시
         function showEarthquakeInfo(properties, geometry) {
@@ -179,28 +288,47 @@
             infoPanel.classList.add('open');
             document.getElementById('toggle-btn').classList.add('open');
             document.getElementById('toggle-btn').innerHTML = '&gt;';
+
+            currentEarthquakeInfo = { properties, geometry };
+            updateStatusBar(`지진 정보가 로드되었습니다: ${properties.place}`);
         }
 
         // 지진 마커 생성 함수
         function createEarthquakeMarker(feature) {
             var magnitude = feature.properties.mag;
-            var significance = feature.properties.sig;
-            var radius = Math.max(5, (magnitude * 2) + (significance / 10));
+            var radius = Math.max(5, magnitude * 2);
             
-            var color = significance > 600 ? '#FF0000' :
-                        significance > 300 ? '#FFA500' :
-                        significance > 100 ? '#FFFF00' : '#00FF00';
+            var color = magnitude > 7 ? '#FF0000' :
+                        magnitude > 6 ? '#FFA500' :
+                        magnitude > 5 ? '#FFFF00' :
+                        magnitude > 4 ? '#ADFF2F' : '#00FF00';
 
-            return L.circleMarker([feature.geometry.coordinates[1], feature.geometry.coordinates[0]], {
+            // 날짜 형식 변환 함수
+            function formatDate(timestamp) {
+                var date = new Date(timestamp);
+                return date.toLocaleString('ko-KR', { timeZone: 'UTC' });
+            }
+
+            // 피해 반경 계산 (단순화된 계산, 실제 상황과는 다를 수 있음)
+            var impactRadius = Math.pow(10, magnitude - 0.7) * 1000; // 단위: 미터
+
+            var marker = L.circleMarker([feature.geometry.coordinates[1], feature.geometry.coordinates[0]], {
                 radius: radius,
                 fillColor: color,
-                color: '#000',
+                color: '#FFFFFF',
                 weight: 1,
                 opacity: 1,
                 fillOpacity: 0.8
             }).bindPopup(function() {
-                return `규모: ${magnitude}<br>중요도: ${significance}`;
+                return `규모: ${magnitude}<br>국가: ${feature.properties.place}<br>발생일시: ${formatDate(feature.properties.time)}<br>예상 피해 반경: ${(impactRadius / 1000).toFixed(2)} km`;
             });
+
+            var impactCircle = L.circle([feature.geometry.coordinates[1], feature.geometry.coordinates[0]], {
+                radius: impactRadius,
+                className: 'impact-circle'
+            });
+
+            return L.layerGroup([marker, impactCircle]);
         }
 
         // USGS API에서 지진 데이터 가져오기 (주간 데이터)
@@ -208,13 +336,18 @@
             .then(response => response.json())
             .then(data => {
                 data.features.forEach(feature => {
-                    var marker = createEarthquakeMarker(feature);
-                    marker.on('click', function() {
+                    var markerGroup = createEarthquakeMarker(feature);
+                    markerGroup.on('click', function() {
                         showEarthquakeInfo(feature.properties, feature.geometry);
                     });
-                    markers.addLayer(marker);
+                    markers.addLayer(markerGroup);
                 });
                 map.addLayer(markers);
+                updateStatusBar('지진 데이터가 로드되었습니다.');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                updateStatusBar('데이터 로드 중 오류가 발생했습니다.');
             });
 
         // 토글 버튼
@@ -224,8 +357,41 @@
             infoPanel.classList.toggle('open');
             if (infoPanel.classList.contains('open')) {
                 this.innerHTML = '&gt;';
+                updateStatusBar('정보 패널이 열렸습니다.');
             } else {
                 this.innerHTML = '&lt;';
+                updateStatusBar('정보 패널이 닫혔습니다.');
+            }
+        });
+        // 새 창에서 보기 버튼
+        document.getElementById('open-window-btn').addEventListener('click', function() {
+            if (currentEarthquakeInfo) {
+                var newWindow = window.open('', '_blank', 'width=600,height=600');
+                newWindow.document.write('<html><head><title>지진 상세 정보</title>');
+                newWindow.document.write('<style>');
+                newWindow.document.write('body { font-family: Arial, sans-serif; padding: 20px; }');
+                newWindow.document.write('table { width: 100%; border-collapse: collapse; }');
+                newWindow.document.write('th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }');
+                newWindow.document.write('th { background-color: #f2f2f2; }');
+                newWindow.document.write('</style>');
+                newWindow.document.write('</head><body>');
+                newWindow.document.write('<h2>지진 상세 정보</h2>');
+                newWindow.document.write('<table>');
+                newWindow.document.write('<tr><th>속성</th><th>값</th></tr>');
+                for (let key in currentEarthquakeInfo.properties) {
+                    let value = currentEarthquakeInfo.properties[key];
+                    if (typeof value === 'object' && value !== null) {
+                        value = JSON.stringify(value);
+                    }
+                    newWindow.document.write(`<tr><th>${key}</th><td>${value}</td></tr>`);
+                }
+                newWindow.document.write(`<tr><th>coordinates</th><td>[${currentEarthquakeInfo.geometry.coordinates.join(', ')}]</td></tr>`);
+                newWindow.document.write('</table>');
+                newWindow.document.write('</body></html>');
+                newWindow.document.close();
+                updateStatusBar('새 창에서 지진 정보를 열었습니다.');
+            } else {
+                updateStatusBar('표시할 지진 정보가 없습니다.');
             }
         });
 
@@ -234,27 +400,26 @@
 
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
-            var grades = [0, 100, 300, 600];
-            var labels = ['경미', '보통', '중요', '매우 중요'];
-            var colors = ['#00FF00', '#FFFF00', '#FFA500', '#FF0000'];
+            var grades = [0, 4, 5, 6, 7];
+            var labels = ['0-4', '4-5', '5-6', '6-7', '7+'];
+            var colors = ['#00FF00', '#ADFF2F', '#FFFF00', '#FFA500', '#FF0000'];
 
-            div.innerHTML = '<h4>지진 중요도</h4>';
+            div.innerHTML = '<h4>지진 규모</h4>';
 
             for (var i = 0; i < grades.length; i++) {
                 div.innerHTML +=
                     '<div class="item">' +
                     '<i class="circle" style="background:' + colors[i] + '"></i> ' +
-                    '<span class="label">' + (grades[i + 1] ? grades[i] + '&ndash;' + grades[i + 1] : grades[i] + '+') +
-                    ' (' + labels[i] + ')</span></div>';
+                    '<span class="label">' + labels[i] + '</span></div>';
             }
-
-            div.innerHTML += '<h4>마커 크기</h4>';
-            div.innerHTML += '<div class="item"><span class="label">규모와 중요도에 비례</span></div>';
 
             return div;
         };
 
         legend.addTo(map);
+
+        // 초기 상태바 메시지
+        updateStatusBar('지도가 로드되었습니다. 지진 데이터를 불러오는 중...');
     </script>
 </body>
 </html>
