@@ -3,573 +3,709 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>지진 정보 지도</title>
+    <title>재난 정보 지도</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
     <style>
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
             font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         #map {
-            width: 100%;
-            height: calc(100% - 24px);
             position: absolute;
             top: 0;
+            bottom: 30px;
             left: 0;
+            right: 0;
         }
-        #status-bar {
-            position: fixed;
+        #statusBar {
+            position: absolute;
             bottom: 0;
             left: 0;
-            width: 100%;
-            height: 24px;
-            background-color: #f0f0f0;
-            border-top: 1px solid #ccc;
-            padding: 3px 5px;
-            box-sizing: border-box;
-            font-size: 12px;
+            right: 0;
+            height: 30px;
+            background-color: rgba(255, 255, 255, 0.8);
             display: flex;
-            justify-content: center;
             align-items: center;
-            color: #444;
+            padding: 0 10px;
+            font-size: 14px;
+            z-index: 1000;
         }
         #coordinates {
-            position: absolute;
-            left: 5px;
-            font-size: 11px;
+            flex: 1;
         }
         #message {
-            font-weight: bold;
-            color: #0066cc;
+            flex: 2;
+            text-align: center;
         }
-        #info-panel {
-            position: fixed;
-            top: 0;
-            right: -500px;
-            width: 500px;
-            height: 100%;
-            background: white;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.3);
-            transition: right 0.3s ease;
-            overflow-y: auto;
-            padding: 20px;
-            box-sizing: border-box;
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
             z-index: 1000;
-            font-size: 14px;
-        }
-        #info-panel.open {
-            right: 0;
-        }
-        #toggle-btn {
-            position: fixed;
-            top: 50%;
-            right: 0;
-            width: 30px;
-            height: 60px;
             background: white;
-            border-radius: 5px 0 0 5px;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-height: calc(100% - 60px);
+            overflow-y: auto;
+        }
+        #disasterTypes {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 20px;
-            z-index: 1001;
-            transition: right 0.3s ease;
+            flex-direction: column;
         }
-        #toggle-btn.open {
-            right: 500px;
-        }
-        .earthquake-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .earthquake-table th, .earthquake-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        .earthquake-table th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-            width: 40%;
-            font-size: 12px;
-            color: #666;
-        }
-        .earthquake-table td {
-            font-size: 13px;
-        }
-        .earthquake-table tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        h2 {
-            font-size: 18px;
-            color: #333;
-            border-bottom: 2px solid #ddd;
-            padding-bottom: 10px;
-        }
-        .legend {
-            padding: 12px;
-            background: white;
-            background: rgba(255, 255, 255, 0.9);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            line-height: 20px;
-            color: #555;
-            font-size: 12px;
-            max-width: 200px;
-        }
-        .legend h4 {
-            margin: 0 0 8px;
-            color: #333;
-            font-size: 14px;
-            font-weight: bold;
-            text-transform: uppercase;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-        .legend .item {
+        #disasterTypes label {
             margin-bottom: 5px;
             display: flex;
             align-items: center;
         }
-        .legend .label {
-            flex: 1;
+        #disasterTypes i {
+            margin-right: 5px;
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
         }
-        #open-window-btn {
-            margin-top: 10px;
-            padding: 5px 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        #open-window-btn:hover {
-            background-color: #45a049;
-        }
-        .leaflet-control-reset a {
-            background-color: #fff;
+        .custom-div-icon {
+            background: #ffffff;
+            border-radius: 50%;
+            text-align: center;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
             width: 30px;
             height: 30px;
             line-height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: #333;
-            border-radius: 4px;
         }
-        .leaflet-control-reset a:hover {
-            background-color: #f4f4f4;
+        .custom-div-icon i {
+            color: #ffffff;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        #disasterPanel {
+            position: fixed;
+            left: -400px;
+            top: 0;
+            width: 400px;
+            height: 100%;
+            background-color: #f8f9fa;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            transition: left 0.3s ease-in-out;
+            z-index: 1001;
+            overflow-y: auto;
         }
-        .leaflet-control-reset a i.spinning {
-            animation: spin 2s linear infinite;
+        #disasterPanel.open {
+            left: 0;
         }
-        #period-selector {
+        #disasterPanel .close-btn {
             position: absolute;
             top: 10px;
-            left: 50px;
-            z-index: 1000;
-            background: white;
-            padding: 5px;
-            border-radius: 5px;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+            right: 10px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #343a40;
         }
-        .earthquake-icon {
+        #disasterPanel .panel-content {
+            padding: 20px;
+        }
+        #disasterPanel h2 {
+            margin-top: 0;
+            color: #343a40;
+            border-bottom: 2px solid #343a40;
+            padding-bottom: 10px;
+            font-size: 24px;
+        }
+        #disasterPanel .disaster-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #disasterPanel .info-item {
+            margin-bottom: 15px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #disasterPanel .info-item .label {
+            font-weight: bold;
+            color: #495057;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        #disasterPanel .info-item .value {
+            color: #212529;
+            display: block;
+            font-size: 16px;
+        }
+        #panelHandle {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            width: 30px;
+            height: 60px;
+            background-color: #ffffff;
+            border-radius: 0 5px 5px 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 100% !important;
-            height: 100% !important;
-            text-shadow: 2px 2px 3px rgba(0,0,0,0.3);
+            z-index: 1002;
+            transition: left 0.3s ease-in-out;
         }
-        .earthquake-icon i {
-            filter: drop-shadow(0 0 1px #fff);
+        #disasterPanel.open + #panelHandle {
+            left: 400px;
         }
-        .marker-cluster-small,
-        .marker-cluster-medium,
-        .marker-cluster-large {
-            background-color: rgba(181, 226, 140, 0.6);
+        #disasterTypes .icon-background {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 5px;
         }
-        .marker-cluster-small div,
-        .marker-cluster-medium div,
-        .marker-cluster-large div {
-            background-color: rgba(110, 204, 57, 0.6);
-        }
-        .marker-cluster {
-            background-clip: padding-box;
-            border-radius: 20px;
-        }
-        .marker-cluster div {
-            width: 30px;
-            height: 30px;
-            margin-left: 5px;
-            margin-top: 5px;
-            text-align: center;
-            border-radius: 15px;
-            font: 12px "Helvetica Neue", Arial, Helvetica, sans-serif;
-        }
-        .marker-cluster span {
-            line-height: 30px;
+        #disasterTypes .all-disasters {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ccc;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="period-selector">
-        <select id="period-select">
-            <option value="day">하루</option>
-            <option value="week" selected>1주일</option>
-            <option value="month">1개월</option>
-        </select>
-    </div>
-    <div id="status-bar">
+    <div id="statusBar">
         <div id="coordinates"></div>
         <div id="message"></div>
     </div>
-    <div id="toggle-btn">&lt;</div>
-    <div id="info-panel">
-        <h2>지진 상세 정보</h2>
-        <div id="earthquake-info"></div>
-        <button id="open-window-btn">새 창에서 보기</button>
+    <div id="controls">
+        <div id="disasterTypes"></div>
+    </div>
+    <div id="disasterPanel">
+        <span class="close-btn">&times;</span>
+        <div class="panel-content"></div>
+    </div>
+    <div id="panelHandle">
+        <i class="fas fa-chevron-right"></i>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.min.js"></script>
     <script>
-        var map = L.map('map').setView([37.5665, 126.9780], 3);
-        var mainLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        var miniMap = new L.Control.MiniMap(L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'), {
-            toggleDisplay: true,
-            minimized: false,
-            position: 'bottomright'
-        }).addTo(map);
-
-        L.control.scale().addTo(map);
-
-        function updateStatusBar(message) {
-            document.getElementById('message').textContent = message;
-        }
-
-        map.on('mousemove', function(e) {
-            document.getElementById('coordinates').textContent = `위도: ${e.latlng.lat.toFixed(6)}, 경도: ${e.latlng.lng.toFixed(6)}`;
-        });
-
-        L.Control.Reset = L.Control.extend({
-            onAdd: function(map) {
-                var container = L.DomUtil.create('div', 'leaflet-control-reset leaflet-bar leaflet-control');
-                var link = L.DomUtil.create('a', 'leaflet-control-reset-button', container);
-                link.href = '#';
-                link.title = '초기 위치로 돌아가기';
-                link.innerHTML = '<i class="fas fa-sync-alt"></i>';
-
-                L.DomEvent.on(link, 'click', L.DomEvent.stop)
-                    .on(link, 'click', function() {
-                        var icon = link.querySelector('i');
-                        icon.classList.add('spinning');
-                        map.setView([37.5665, 126.9780], 3);
-                        updateStatusBar('지도가 초기 위치로 재설정되었습니다.');
-                        
-                        var infoPanel = document.getElementById('info-panel');
-                        var toggleBtn = document.getElementById('toggle-btn');
-                        infoPanel.classList.remove('open');
-                        toggleBtn.classList.remove('open');
-                        toggleBtn.innerHTML = '&lt;';
-                        
-                        setTimeout(() => {
-                            icon.classList.remove('spinning');
-                        }, 2000);
-                    }, this);
-
-                return container;
-            }
-        });
-
-        L.control.reset = function(opts) {
-            return new L.Control.Reset(opts);
-        }
-
-        L.control.reset({ position: 'topleft' }).addTo(map);
-
-        var markers = L.markerClusterGroup({
-            chunkedLoading: true,
-            spiderfyOnMaxZoom: false,
-            showCoverageOnHover: false,
-            zoomToBoundsOnClick: true,
-            removeOutsideVisibleBounds: true,
-            disableClusteringAtZoom: 8,
-            maxClusterRadius: 80,
-            iconCreateFunction: function(cluster) {
-                var childCount = cluster.getChildCount();
-                var c = ' marker-cluster-';
-                if (childCount < 10) {
-                    c += 'small';
-                } else if (childCount < 100) {
-                    c += 'medium';
-                } else {
-                    c += 'large';
-                }
-                return new L.DivIcon({
-                    html: '<div><span>' + childCount + '</span></div>',
-                    className: 'marker-cluster' + c,
-                    iconSize: new L.Point(40, 40)
-                });
-            }
-        });
-
-        var currentEarthquakeInfo = null;
-
-        function showEarthquakeInfo(properties, geometry) {
-            var infoPanel = document.getElementById('info-panel');
-            var earthquakeInfo = document.getElementById('earthquake-info');
-            
-            var tableHTML = '<table class="earthquake-table"><tr><th>속성</th><th>값</th></tr>';
-            for (let key in properties) {
-                let value = properties[key];
-                if (typeof value === 'object' && value !== null) {
-                    value = JSON.stringify(value);
-                }
-                tableHTML += `<tr><th>${key}</th><td>${value}</td></tr>`;
-            }
-            tableHTML += `<tr><th>coordinates</th><td>[${geometry.coordinates.join(', ')}]</td></tr>`;
-            tableHTML += '</table>';
-
-            earthquakeInfo.innerHTML = tableHTML;
-            infoPanel.classList.add('open');
-            document.getElementById('toggle-btn').classList.add('open');
-            document.getElementById('toggle-btn').innerHTML = '&gt;';
-
-            currentEarthquakeInfo = { properties, geometry };
-            updateStatusBar(`지진 정보가 로드되었습니다: ${properties.place}`);
-        }
-
-        function createEarthquakeMarker(feature) {
-            var magnitude = feature.properties.mag;
-            
-            var iconSize = Math.max(20, magnitude * 5);
-            var iconColor = magnitude > 7 ? '#8b0000' :
-                            magnitude > 6 ? '#a52a2a' :
-                            magnitude > 5 ? '#b8860b' :
-                            magnitude > 4 ? '#daa520' :
-                                            '#006400';
-
-                                            var icon = L.divIcon({
-                html: `<i class="fas fa-house-damage" style="font-size: ${iconSize}px; color: ${iconColor};"></i>`,
-                className: 'earthquake-icon',
-                iconSize: [iconSize, iconSize],
-                iconAnchor: [iconSize/2, iconSize/2]
-            });
-
-            function formatDate(timestamp) {
-                var date = new Date(timestamp);
-                return date.toLocaleString('ko-KR', { timeZone: 'UTC' });
-            }
-
-            var marker = L.marker([feature.geometry.coordinates[1], feature.geometry.coordinates[0]], {icon: icon})
-                .bindPopup(function() {
-                    return `<strong>규모: ${magnitude}</strong><br>위치: ${feature.properties.place}<br>발생일시: ${formatDate(feature.properties.time)}`;
-                });
-
-            return marker;
-        }
-
-        function fetchEarthquakeData(period) {
-            markers.clearLayers();
-
-            var apiUrl;
-            switch(period) {
-                case 'day':
-                    apiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
-                    break;
-                case 'week':
-                    apiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
-                    break;
-                case 'month':
-                    apiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson';
-                    break;
-                default:
-                    apiUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
-            }
-
-            updateStatusBar(`${period} 기간의 지진 데이터를 불러오는 중...`);
-
-            fetch(apiUrl)
-                .then(response => response.json())
-                .then(data => {
-                    data.features.forEach(feature => {
-                        var marker = createEarthquakeMarker(feature);
-                        marker.on('click', function() {
-                            showEarthquakeInfo(feature.properties, feature.geometry);
-                        });
-                        markers.addLayer(marker);
-                    });
-                    if (!map.hasLayer(markers)) {
-                        map.addLayer(markers);
+        const disasterData = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI001",
+                        "type": "flood",
+                        "severity": "high",
+                        "timestamp": "2024-07-10T09:30:00Z",
+                        "description": "Severe flooding in Bangkok, Thailand",
+                        "country": "Thailand"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [100.5018, 13.7563]
                     }
-                    updateStatusBar(`${period} 기간의 지진 데이터가 로드되었습니다.`);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    updateStatusBar('데이터 로드 중 오류가 발생했습니다.');
-                });
-        }
-
-        document.getElementById('period-select').addEventListener('change', function(e) {
-            fetchEarthquakeData(e.target.value);
-        });
-
-        document.getElementById('toggle-btn').addEventListener('click', function() {
-            var infoPanel = document.getElementById('info-panel');
-            this.classList.toggle('open');
-            infoPanel.classList.toggle('open');
-            if (infoPanel.classList.contains('open')) {
-                this.innerHTML = '&gt;';
-                updateStatusBar('정보 패널이 열렸습니다.');
-            } else {
-                this.innerHTML = '&lt;';
-                updateStatusBar('정보 패널이 닫혔습니다.');
-            }
-        });
-
-        document.getElementById('open-window-btn').addEventListener('click', function() {
-            if (currentEarthquakeInfo) {
-                var newWindow = window.open('', '_blank', 'width=600,height=600');
-                newWindow.document.write(`
-                    <html>
-                    <head>
-                        <title>지진 상세 정보</title>
-                        <style>
-                            body {
-                                font-family: Arial, sans-serif;
-                                padding: 15px;
-                                background-color: #f0f0f0;
-                                margin: 0;
-                                font-size: 12px;
-                            }
-                            .container {
-                                background-color: white;
-                                border-radius: 8px;
-                                padding: 15px;
-                                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                            }
-                            h2 {
-                                color: #333;
-                                border-bottom: 2px solid #ddd;
-                                padding-bottom: 8px;
-                                margin-top: 0;
-                                font-size: 16px;
-                            }
-                            table {
-                                width: 100%;
-                                border-collapse: collapse;
-                                margin-top: 15px;
-                            }
-                            th, td {
-                                border: 1px solid #ddd;
-                                padding: 8px;
-                                text-align: left;
-                                font-size: 11px;
-                            }
-                            th {
-                                background-color: #f2f2f2;
-                                font-weight: bold;
-                                width: 40%;
-                            }
-                            tr:nth-child(even) {
-                                background-color: #f9f9f9;
-                            }
-                            .close-btn {
-                                position: absolute;
-                                top: 8px;
-                                right: 8px;
-                                background-color: #f44336;
-                                color: white;
-                                border: none;
-                                padding: 6px 10px;
-                                border-radius: 4px;
-                                cursor: pointer;
-                                font-size: 12px;
-                            }
-                            .close-btn:hover {
-                                background-color: #d32f2f;
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <h2>지진 상세 정보</h2>
-                            <button class="close-btn" onclick="window.close()">닫기</button>
-                            <table>
-                                <tr><th>속성</th><th>값</th></tr>
-                `);
-
-                for (let key in currentEarthquakeInfo.properties) {
-                    let value = currentEarthquakeInfo.properties[key];
-                    if (typeof value === 'object' && value !== null) {
-                        value = JSON.stringify(value);
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI002",
+                        "type": "earthquake",
+                        "severity": "high",
+                        "timestamp": "2024-07-10T10:15:00Z",
+                        "description": "Major earthquake near Tokyo, Japan",
+                        "country": "Japan"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [139.6917, 35.6895]
                     }
-                    newWindow.document.write(`<tr><th>${key}</th><td>${value}</td></tr>`);
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI003",
+                        "type": "wildfire",
+                        "severity": "high",
+                        "timestamp": "2024-07-10T11:00:00Z",
+                        "description": "Massive wildfire in California, USA",
+                        "country": "United States"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-119.4179, 36.7783]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI004",
+                        "type": "hurricane",
+                        "severity": "high",
+                        "timestamp": "2024-07-10T12:30:00Z",
+                        "description": "Hurricane approaching Florida coast, USA",
+                        "country": "United States"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-81.5158, 27.6648]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI005",
+                        "type": "volcano",
+                        "severity": "medium",
+                        "timestamp": "2024-07-10T13:45:00Z",
+                        "description": "Mount Etna eruption, Sicily, Italy",
+                        "country": "Italy"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [14.9934, 37.7510]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI006",
+                        "type": "tsunami",
+                        "severity": "high",
+                        "timestamp": "2024-07-11T06:00:00Z",
+                        "description": "Tsunami warning for Indonesian coast",
+                        "country": "Indonesia"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [106.8456, -6.2088]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI007",
+                        "type": "avalanche",
+                        "severity": "medium",
+                        "timestamp": "2024-07-11T08:30:00Z",
+                        "description": "Avalanche in the Swiss Alps",
+                        "country": "Switzerland"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [8.2275, 46.8182]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI008",
+                        "type": "drought",
+                        "severity": "high",
+                        "timestamp": "2024-07-11T10:00:00Z",
+                        "description": "Severe drought in Ethiopia",
+                        "country": "Ethiopia"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [40.4897, 9.1450]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI009",
+                        "type": "blizzard",
+                        "severity": "high",
+                        "timestamp": "2024-07-11T12:15:00Z",
+                        "description": "Severe blizzard in Quebec, Canada",
+                        "country": "Canada"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-71.2082, 46.8139]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI010",
+                        "type": "cyclone",
+                        "severity": "high",
+                        "timestamp": "2024-07-11T14:30:00Z",
+                        "description": "Tropical cyclone approaching Madagascar",
+                        "country": "Madagascar"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [46.8691, -18.7669]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI011",
+                        "type": "landslide",
+                        "severity": "medium",
+                        "timestamp": "2024-07-12T03:45:00Z",
+                        "description": "Landslide in Rio de Janeiro, Brazil",
+                        "country": "Brazil"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-43.1729, -22.9068]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI012",
+                        "type": "heatwave",
+                        "severity": "high",
+                        "timestamp": "2024-07-12T07:20:00Z",
+                        "description": "Extreme heatwave in Delhi, India",
+                        "country": "India"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [77.2090, 28.6139]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI013",
+                        "type": "tornado",
+                        "severity": "high",
+                        "timestamp": "2024-07-12T15:10:00Z",
+                        "description": "Destructive tornado in Oklahoma, USA",
+                        "country": "United States"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-97.5164, 35.4676]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI014",
+                        "type": "flood",
+                        "severity": "medium",
+                        "timestamp": "2024-07-13T02:30:00Z",
+                        "description": "Flash floods in Karachi, Pakistan",
+                        "country": "Pakistan"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [67.0011, 24.8607]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI015",
+                        "type": "earthquake",
+                        "severity": "medium",
+                        "timestamp": "2024-07-13T11:45:00Z",
+                        "description": "Earthquake in Mexico City, Mexico",
+                        "country": "Mexico"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-99.1332, 19.4326]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI016",
+                        "type": "wildfire",
+                        "severity": "high",
+                        "timestamp": "2024-07-13T18:20:00Z",
+                        "description": "Bushfires in New South Wales, Australia",
+                        "country": "Australia"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [151.2093, -33.8688]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI017",
+                        "type": "volcano",
+                        "severity": "medium",
+                        "timestamp": "2024-07-14T05:10:00Z",
+                        "description": "Volcanic activity at Mount Vesuvius, Italy",
+                        "country": "Italy"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [14.4268, 40.8216]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI018",
+                        "type": "tsunami",
+                        "severity": "high",
+                        "timestamp": "2024-07-14T13:40:00Z",
+                        "description": "Tsunami alert for Chilean coast",
+                        "country": "Chile"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [-70.6483, -33.4569]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI019",
+                        "type": "drought",
+                        "severity": "high",
+                        "timestamp": "2024-07-14T21:15:00Z",
+                        "description": "Prolonged drought in Namibia",
+                        "country": "Namibia"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [17.0879, -22.5597]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "id": "GDI020",
+                        "type": "cyclone",
+                        "severity": "high",
+                        "timestamp": "2024-07-15T04:50:00Z",
+                        "description": "Cyclone approaching Bangladesh coast",
+                        "country": "Bangladesh"
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [90.4125, 23.8103]
+                    }
                 }
-                newWindow.document.write(`<tr><th>coordinates</th><td>[${currentEarthquakeInfo.geometry.coordinates.join(', ')}]</td></tr>`);
-                newWindow.document.write(`
-                            </table>
-                        </div>
-                    </body>
-                    </html>
-                `);
-                newWindow.document.close();
-                updateStatusBar('새 창에서 지진 정보를 열었습니다.');
-            } else {
-                updateStatusBar('표시할 지진 정보가 없습니다.');
-            }
-        });
-
-        var legend = L.control({position: 'bottomleft'});
-
-        legend.onAdd = function (map) {
-            var div = L.DomUtil.create('div', 'info legend');
-            var grades = [0, 4, 5, 6, 7];
-            var labels = ['0-4', '4-5', '5-6', '6-7', '7+'];
-            var colors = ['#006400', '#daa520', '#b8860b', '#a52a2a', '#8b0000'];
-
-            div.innerHTML = '<h4>지진 규모</h4>';
-
-            for (var i = 0; i < grades.length; i++) {
-                div.innerHTML +=
-                    '<div class="item">' +
-                    `<span style="
-                        display: inline-block;
-                        width: 20px;
-                        height: 20px;
-                        border-radius: 50%;
-                        background-color: ${colors[i]};
-                        margin-right: 5px;
-                        vertical-align: middle;
-                    "></span>` +
-                    '<span class="label">' + labels[i] + '</span></div>';
-            }
-
-            return div;
+            ]
         };
 
-        legend.addTo(map);
+        const disasterIcons = {
+            flood: { icon: 'fa-water', color: '#ffffff', background: '#4287f5' },
+            earthquake: { icon: 'fa-house-damage', color: '#ffffff', background: '#964B00' },
+            wildfire: { icon: 'fa-fire', color: '#ffffff', background: '#FF4500' },
+            hurricane: { icon: 'fa-wind', color: '#ffffff', background: '#00FFFF' },
+            volcano: { icon: 'fa-mountain', color: '#ffffff', background: '#FF1493' },
+            tsunami: { icon: 'fa-wave-square', color: '#ffffff', background: '#1E90FF' },
+            avalanche: { icon: 'fa-icicles', color: '#000000', background: '#FFFFFF' },
+            drought: { icon: 'fa-sun', color: '#000000', background: '#FFD700' },
+            blizzard: { icon: 'fa-snowflake', color: '#ffffff', background: '#87CEEB' },
+            cyclone: { icon: 'fa-wind', color: '#ffffff', background: '#8A2BE2' },
+            landslide: { icon: 'fa-mountain', color: '#ffffff', background: '#8B4513' },
+            heatwave: { icon: 'fa-temperature-high', color: '#ffffff', background: '#FF6347' },
+            tornado: { icon: 'fa-umbrella', color: '#ffffff', background: '#808080' }
+        };
 
-        fetchEarthquakeData('week');
+        document.addEventListener('DOMContentLoaded', function() {
+            const map = L.map('map', {
+                center: [0, 0],
+                zoom: 3,
+                minZoom: 3,
+                maxZoom: 17
+            });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                minZoom: 3,
+                maxZoom: 17
+            }).addTo(map);
+
+            const layerGroup = L.layerGroup().addTo(map);
+            const disasterTypesElement = document.getElementById('disasterTypes');
+            const statusBar = document.getElementById('statusBar');
+            const coordinatesElement = document.getElementById('coordinates');
+            const messageElement = document.getElementById('message');
+            const disasterPanel = document.getElementById('disasterPanel');
+            const disasterPanelContent = disasterPanel.querySelector('.panel-content');
+            const closeBtn = disasterPanel.querySelector('.close-btn');
+            const panelHandle = document.getElementById('panelHandle');
+
+            // Minimap plugin
+            new L.Control.MiniMap(L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                minZoom: 3,
+                maxZoom: 17
+            }), {
+                toggleDisplay: true,
+                minimized: false,
+                position: 'bottomright'
+            }).addTo(map);
+
+            // Scale plugin
+            L.control.scale({
+                imperial: true,
+                metric: true,
+                position: 'bottomleft'
+            }).addTo(map);
+
+            function createCustomIcon(type) {
+                return L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: ${disasterIcons[type].background};">
+                             <i class="fas ${disasterIcons[type].icon}" style="color: ${disasterIcons[type].color};"></i>
+                           </div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+            }
+
+            function addMarkers() {
+                layerGroup.clearLayers();
+                const checkedTypes = Array.from(document.querySelectorAll('#disasterTypes input:checked:not([value="all"])'))
+                    .map(input => input.value);
+                disasterData.features.forEach(feature => {
+                    if (checkedTypes.includes(feature.properties.type)) {
+                        const [lng, lat] = feature.geometry.coordinates;
+                        const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)})
+                            .bindPopup(feature.properties.description)
+                            .on('click', () => showDisasterInfo(feature.properties));
+                        layerGroup.addLayer(marker);
+                    }
+                });
+                updateStatusBarMessage();
+            }
+
+            function showDisasterInfo(properties) {
+                disasterPanelContent.innerHTML = `
+                    <div class="disaster-icon">
+                        <i class="fas ${disasterIcons[properties.type].icon}" style="color: ${disasterIcons[properties.type].background};"></i>
+                    </div>
+                    <h2>${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)} 정보</h2>
+                    <div class="info-item">
+                        <span class="label">설명</span>
+                        <span class="value">${properties.description}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">심각도</span>
+                        <span class="value">${properties.severity}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">발생 시각</span>
+                        <span class="value">${properties.timestamp}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">국가</span>
+                        <span class="value">${properties.country}</span>
+                    </div>
+                `;
+                openPanel();
+            }
+
+            function openPanel() {
+                disasterPanel.classList.add('open');
+                panelHandle.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            }
+
+            function closePanel() {
+                disasterPanel.classList.remove('open');
+                panelHandle.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            }
+
+            closeBtn.addEventListener('click', closePanel);
+
+            panelHandle.addEventListener('click', () => {
+                if (disasterPanel.classList.contains('open')) {
+                    closePanel();
+                } else {
+                    openPanel();
+                }
+            });
+
+            function createCheckboxes() {
+                const types = new Set(disasterData.features.map(f => f.properties.type));
+                
+                // '전체' 체크박스 추가
+                const allLabel = document.createElement('label');
+                allLabel.className = 'all-disasters';
+                const allCheckbox = document.createElement('input');
+                allCheckbox.type = 'checkbox';
+                allCheckbox.value = 'all';
+                allCheckbox.checked = true;
+                allCheckbox.addEventListener('change', toggleAllDisasters);
+                allLabel.appendChild(allCheckbox);
+                allLabel.appendChild(document.createTextNode('전체'));
+                disasterTypesElement.appendChild(allLabel);
+
+                types.forEach(type => {
+                    const label = document.createElement('label');
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = type;
+                    checkbox.checked = true;
+                    checkbox.addEventListener('change', function() {
+                        updateAllCheckbox();
+                        addMarkers();
+                    });
+
+                    const iconBackground = document.createElement('div');
+                    iconBackground.className = 'icon-background';
+                    iconBackground.style.backgroundColor = disasterIcons[type].background;
+
+                    const icon = document.createElement('i');
+                    icon.className = `fas ${disasterIcons[type].icon}`;
+                    icon.style.color = disasterIcons[type].color;
+
+                    iconBackground.appendChild(icon);
+                    label.appendChild(checkbox);
+                    label.appendChild(iconBackground);
+                    label.appendChild(document.createTextNode(type.charAt(0).toUpperCase() + type.slice(1)));
+                    disasterTypesElement.appendChild(label);
+                });
+            }
+
+            function toggleAllDisasters(event) {
+                const isChecked = event.target.checked;
+                document.querySelectorAll('#disasterTypes input[type="checkbox"]').forEach(checkbox => {
+                    if (checkbox.value !== 'all') {
+                        checkbox.checked = isChecked;
+                    }
+                });
+                addMarkers();
+            }
+
+            function updateAllCheckbox() {
+                const allCheckbox = document.querySelector('#disasterTypes input[value="all"]');
+                const otherCheckboxes = document.querySelectorAll('#disasterTypes input[type="checkbox"]:not([value="all"])');
+                allCheckbox.checked = Array.from(otherCheckboxes).every(checkbox => checkbox.checked);
+            }
+
+            function updateStatusBarMessage() {
+                const activeDisasters = layerGroup.getLayers().length;
+                messageElement.textContent = `현재 표시된 재난 수: ${activeDisasters}`;
+            }
+
+            map.on('mousemove', (e) => {
+                const {lat, lng} = e.latlng;
+                coordinatesElement.textContent = `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+            });
+
+            // 윈도우 리사이즈 이벤트 처리
+            window.addEventListener('resize', function() {
+                map.invalidateSize();
+            });
+
+            createCheckboxes();
+            addMarkers();
+        });
     </script>
 </body>
 </html>
