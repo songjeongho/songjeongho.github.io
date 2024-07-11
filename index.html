@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>재난 정보 지도</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
     <style>
@@ -21,6 +21,7 @@
             bottom: 30px;
             left: 0;
             right: 0;
+            z-index: 1;
         }
         #statusBar {
             position: absolute;
@@ -41,33 +42,8 @@
         #message {
             flex: 2;
             text-align: center;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            max-height: calc(100% - 60px);
-            overflow-y: auto;
-        }
-        #disasterTypes {
-            display: flex;
-            flex-direction: column;
-        }
-        #disasterTypes label {
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-        }
-        #disasterTypes i {
-            margin-right: 5px;
-            width: 20px;
-            text-align: center;
-            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
         .custom-div-icon {
             background: #ffffff;
@@ -96,32 +72,28 @@
         #disasterPanel.open {
             left: 0;
         }
-        #disasterPanel .close-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            font-size: 24px;
-            cursor: pointer;
-            color: #343a40;
-        }
         #disasterPanel .panel-content {
-            padding: 20px;
+            padding: 0;
         }
         #disasterPanel h2 {
-            margin-top: 0;
-            color: #343a40;
-            border-bottom: 2px solid #343a40;
-            padding-bottom: 10px;
+            margin: 0;
+            color: #ffffff;
+            background-color: #343a40;
+            padding: 15px;
             font-size: 24px;
         }
         #disasterPanel .disaster-icon {
             font-size: 48px;
             text-align: center;
-            margin-bottom: 20px;
+            margin: 20px 0;
+        }
+        #disasterPanel .info-content {
+            background-color: #ffffff;
+            padding: 20px;
         }
         #disasterPanel .info-item {
             margin-bottom: 15px;
-            background-color: #ffffff;
+            background-color: #f1f3f5;
             border-radius: 5px;
             padding: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -157,20 +129,47 @@
         #disasterPanel.open + #panelHandle {
             left: 400px;
         }
-        #disasterTypes .icon-background {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 5px;
+        .leaflet-popup-content-wrapper {
+            padding: 0;
         }
-        #disasterTypes .all-disasters {
+        .leaflet-popup-content {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        .popup-content {
+            padding: 15px;
+        }
+        .popup-title {
+            font-size: 18px;
             font-weight: bold;
             margin-bottom: 10px;
             padding-bottom: 5px;
-            border-bottom: 1px solid #ccc;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .popup-description {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .popup-close {
+            display: block;
+            text-align: center;
+            padding: 8px;
+            background-color: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            font-weight: bold;
+            border-top: 1px solid #e0e0e0;
+        }
+        .popup-close:hover {
+            background-color: #e0e0e0;
+        }
+        .leaflet-control-zoom {
+            margin-top: 50px !important;
+        }
+        .leaflet-control-home {
+            font-size: 18px;
+            text-align: center;
+            line-height: 30px;
         }
     </style>
 </head>
@@ -180,18 +179,14 @@
         <div id="coordinates"></div>
         <div id="message"></div>
     </div>
-    <div id="controls">
-        <div id="disasterTypes"></div>
-    </div>
     <div id="disasterPanel">
-        <span class="close-btn">&times;</span>
         <div class="panel-content"></div>
     </div>
     <div id="panelHandle">
         <i class="fas fa-chevron-right"></i>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.min.js"></script>
     <script>
         const disasterData = {
@@ -521,7 +516,8 @@
                 center: [0, 0],
                 zoom: 3,
                 minZoom: 3,
-                maxZoom: 17
+                maxZoom: 17,
+                worldCopyJump: true
             });
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -531,16 +527,13 @@
             }).addTo(map);
 
             const layerGroup = L.layerGroup().addTo(map);
-            const disasterTypesElement = document.getElementById('disasterTypes');
             const statusBar = document.getElementById('statusBar');
             const coordinatesElement = document.getElementById('coordinates');
             const messageElement = document.getElementById('message');
             const disasterPanel = document.getElementById('disasterPanel');
             const disasterPanelContent = disasterPanel.querySelector('.panel-content');
-            const closeBtn = disasterPanel.querySelector('.close-btn');
             const panelHandle = document.getElementById('panelHandle');
 
-            // Minimap plugin
             new L.Control.MiniMap(L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 minZoom: 3,
                 maxZoom: 17
@@ -550,17 +543,33 @@
                 position: 'bottomright'
             }).addTo(map);
 
-            // Scale plugin
             L.control.scale({
                 imperial: true,
                 metric: true,
                 position: 'bottomleft'
             }).addTo(map);
 
+            // 초기화 버튼 추가
+            L.Control.Home = L.Control.extend({
+                onAdd: function(map) {
+                    const button = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-home');
+                    button.innerHTML = '<a href="#" title="Reset View" role="button" aria-label="Reset View"><i class="fas fa-home"></i></a>';
+                    L.DomEvent.on(button, 'click', function(e) {
+                        e.preventDefault();
+                        map.setView([0, 0], 3);
+                    });
+                    return button;
+                }
+            });
+            L.control.home = function(opts) {
+                return new L.Control.Home(opts);
+            }
+            L.control.home({ position: 'topright' }).addTo(map);
+
             function createCustomIcon(type) {
                 return L.divIcon({
                     className: 'custom-div-icon',
-                    html: `<div style="background-color: ${disasterIcons[type].background};">
+                    html: `<div style="background-color: ${disasterIcons[type].background}; border-radius: 50%; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);">
                              <i class="fas ${disasterIcons[type].icon}" style="color: ${disasterIcons[type].color};"></i>
                            </div>`,
                     iconSize: [30, 30],
@@ -570,41 +579,49 @@
 
             function addMarkers() {
                 layerGroup.clearLayers();
-                const checkedTypes = Array.from(document.querySelectorAll('#disasterTypes input:checked:not([value="all"])'))
-                    .map(input => input.value);
                 disasterData.features.forEach(feature => {
-                    if (checkedTypes.includes(feature.properties.type)) {
-                        const [lng, lat] = feature.geometry.coordinates;
-                        const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)})
-                            .bindPopup(feature.properties.description)
-                            .on('click', () => showDisasterInfo(feature.properties));
-                        layerGroup.addLayer(marker);
-                    }
+                    const [lng, lat] = feature.geometry.coordinates;
+                    const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)})
+                        .bindPopup(createPopupContent(feature.properties))
+                        .on('click', () => showDisasterInfo(feature.properties));
+                    layerGroup.addLayer(marker);
                 });
                 updateStatusBarMessage();
             }
 
+            function createPopupContent(properties) {
+                return `
+                    <div class="popup-content">
+                        <div class="popup-title">${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)}</div>
+                        <div class="popup-description">${properties.description}</div>
+                    </div>
+                    <a href="#" class="popup-close">닫기</a>
+                `;
+            }
+
             function showDisasterInfo(properties) {
                 disasterPanelContent.innerHTML = `
-                    <div class="disaster-icon">
-                        <i class="fas ${disasterIcons[properties.type].icon}" style="color: ${disasterIcons[properties.type].background};"></i>
-                    </div>
                     <h2>${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)} 정보</h2>
-                    <div class="info-item">
-                        <span class="label">설명</span>
-                        <span class="value">${properties.description}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">심각도</span>
-                        <span class="value">${properties.severity}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">발생 시각</span>
-                        <span class="value">${properties.timestamp}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">국가</span>
-                        <span class="value">${properties.country}</span>
+                    <div class="info-content">
+                        <div class="disaster-icon">
+                            <i class="fas ${disasterIcons[properties.type].icon}" style="color: ${disasterIcons[properties.type].background};"></i>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">설명</span>
+                            <span class="value">${properties.description}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">심각도</span>
+                            <span class="value">${properties.severity}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">발생 시각</span>
+                            <span class="value">${properties.timestamp}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">국가</span>
+                            <span class="value">${properties.country}</span>
+                        </div>
                     </div>
                 `;
                 openPanel();
@@ -620,8 +637,6 @@
                 panelHandle.innerHTML = '<i class="fas fa-chevron-right"></i>';
             }
 
-            closeBtn.addEventListener('click', closePanel);
-
             panelHandle.addEventListener('click', () => {
                 if (disasterPanel.classList.contains('open')) {
                     closePanel();
@@ -629,64 +644,6 @@
                     openPanel();
                 }
             });
-
-            function createCheckboxes() {
-                const types = new Set(disasterData.features.map(f => f.properties.type));
-                
-                // '전체' 체크박스 추가
-                const allLabel = document.createElement('label');
-                allLabel.className = 'all-disasters';
-                const allCheckbox = document.createElement('input');
-                allCheckbox.type = 'checkbox';
-                allCheckbox.value = 'all';
-                allCheckbox.checked = true;
-                allCheckbox.addEventListener('change', toggleAllDisasters);
-                allLabel.appendChild(allCheckbox);
-                allLabel.appendChild(document.createTextNode('전체'));
-                disasterTypesElement.appendChild(allLabel);
-
-                types.forEach(type => {
-                    const label = document.createElement('label');
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.value = type;
-                    checkbox.checked = true;
-                    checkbox.addEventListener('change', function() {
-                        updateAllCheckbox();
-                        addMarkers();
-                    });
-
-                    const iconBackground = document.createElement('div');
-                    iconBackground.className = 'icon-background';
-                    iconBackground.style.backgroundColor = disasterIcons[type].background;
-
-                    const icon = document.createElement('i');
-                    icon.className = `fas ${disasterIcons[type].icon}`;
-                    icon.style.color = disasterIcons[type].color;
-
-                    iconBackground.appendChild(icon);
-                    label.appendChild(checkbox);
-                    label.appendChild(iconBackground);
-                    label.appendChild(document.createTextNode(type.charAt(0).toUpperCase() + type.slice(1)));
-                    disasterTypesElement.appendChild(label);
-                });
-            }
-
-            function toggleAllDisasters(event) {
-                const isChecked = event.target.checked;
-                document.querySelectorAll('#disasterTypes input[type="checkbox"]').forEach(checkbox => {
-                    if (checkbox.value !== 'all') {
-                        checkbox.checked = isChecked;
-                    }
-                });
-                addMarkers();
-            }
-
-            function updateAllCheckbox() {
-                const allCheckbox = document.querySelector('#disasterTypes input[value="all"]');
-                const otherCheckboxes = document.querySelectorAll('#disasterTypes input[type="checkbox"]:not([value="all"])');
-                allCheckbox.checked = Array.from(otherCheckboxes).every(checkbox => checkbox.checked);
-            }
 
             function updateStatusBarMessage() {
                 const activeDisasters = layerGroup.getLayers().length;
@@ -698,12 +655,36 @@
                 coordinatesElement.textContent = `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
             });
 
-            // 윈도우 리사이즈 이벤트 처리
+            // 지도 이동 제한 설정
+            map.on('move', function() {
+                if (map.getZoom() === map.getMinZoom()) {
+                    const center = map.getCenter();
+                    const maxLatitude = 85;
+                    const minLatitude = -85;
+                    
+                    if (center.lat > maxLatitude) {
+                        map.panTo([maxLatitude, center.lng]);
+                    } else if (center.lat < minLatitude) {
+                        map.panTo([minLatitude, center.lng]);
+                    }
+                }
+            });
+
             window.addEventListener('resize', function() {
                 map.invalidateSize();
             });
 
-            createCheckboxes();
+            // 팝업 닫기 버튼 이벤트 리스너
+            map.on('popupopen', function(e) {
+                const closeButton = e.popup._contentNode.querySelector('.popup-close');
+                if (closeButton) {
+                    closeButton.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        map.closePopup();
+                    });
+                }
+            });
+
             addMarkers();
         });
     </script>
