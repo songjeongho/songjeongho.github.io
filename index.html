@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
     <style>
+        /* 이전 스타일은 그대로 유지 */
         body, html {
             margin: 0;
             padding: 0;
@@ -53,90 +54,6 @@
             height: 30px;
             line-height: 30px;
         }
-        #disasterPanel {
-            position: fixed;
-            left: -300px;
-            top: 0;
-            width: 300px;
-            height: 100%;
-            background-color: #f8f9fa;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            transition: left 0.3s ease-in-out;
-            z-index: 1001;
-            display: flex;
-            flex-direction: column;
-        }
-        #disasterPanel.open {
-            left: 0;
-        }
-        #disasterPanel .panel-header {
-            background-color: #343a40;
-            color: #ffffff;
-            padding: 15px;
-            font-size: 20px;
-            font-weight: bold;
-            text-align: center;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        #disasterPanel .panel-header .close-btn {
-            color: #ffffff;
-            cursor: pointer;
-        }
-        #disasterPanel .panel-subheader {
-            background-color: #495057;
-            color: #ffffff;
-            padding: 10px 15px;
-            font-size: 16px;
-            text-align: center;
-        }
-        #disasterPanel .panel-content {
-            flex-grow: 1;
-            padding: 15px;
-            background-color: #f8f9fa;
-            overflow-y: auto;
-        }
-        #disasterPanel .info-item {
-            margin-bottom: 15px;
-            border-radius: 5px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        #disasterPanel .info-item .label {
-            font-weight: bold;
-            color: #ffffff;
-            display: block;
-            padding: 10px;
-            font-size: 14px;
-            background-color: #343a40;
-        }
-        #disasterPanel .info-item .value {
-            color: #212529;
-            display: block;
-            font-size: 16px;
-            padding: 10px;
-            background-color: #ffffff;
-        }
-        #panelHandle {
-            position: fixed;
-            left: 0;
-            top: 50%;
-            width: 25px;
-            height: 50px;
-            background-color: #ffffff;
-            border-radius: 0 5px 5px 0;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1002;
-            transition: left 0.3s ease-in-out;
-        }
-        #disasterPanel.open + #panelHandle {
-            left: 300px;
-        }
         .leaflet-control-zoom {
             margin-top: 50px !important;
         }
@@ -146,9 +63,11 @@
             line-height: 30px;
         }
         .leaflet-popup-content-wrapper {
-            background-color: #ffffff;
+            background-color: #000000;
+            color: #ffffff;
             border-radius: 5px;
             box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+            border: 2px solid #ffffff; /* 팝업창 테두리 추가 */
         }
         .leaflet-popup-content {
             margin: 13px 19px;
@@ -162,7 +81,22 @@
             height: 20px;
         }
         .leaflet-popup-tip {
-            background-color: #ffffff;
+            background-color: #000000;
+        }
+        .close-button {
+            display: block;
+            width: 100%;
+            padding: 5px;
+            background-color: #333333;
+            color: #ffffff;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+        .leaflet-popup-close-button {
+            display: none;
         }
     </style>
 </head>
@@ -171,17 +105,6 @@
     <div id="statusBar">
         <div id="coordinates"></div>
         <div id="message"></div>
-    </div>
-    <div id="disasterPanel">
-        <div class="panel-header">
-            재난 정보
-            <span class="close-btn"><i class="fas fa-times"></i></span>
-        </div>
-        <div class="panel-subheader"></div>
-        <div class="panel-content"></div>
-    </div>
-    <div id="panelHandle">
-        <i class="fas fa-chevron-right"></i>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -551,11 +474,6 @@
             const statusBar = document.getElementById('statusBar');
             const coordinatesElement = document.getElementById('coordinates');
             const messageElement = document.getElementById('message');
-            const disasterPanel = document.getElementById('disasterPanel');
-            const disasterPanelSubheader = disasterPanel.querySelector('.panel-subheader');
-            const disasterPanelContent = disasterPanel.querySelector('.panel-content');
-            const panelHandle = document.getElementById('panelHandle');
-            const closePanelBtn = disasterPanel.querySelector('.close-btn');
 
             L.control.scale({
                 imperial: true,
@@ -594,77 +512,37 @@
                 layerGroup.clearLayers();
                 disasterData.features.forEach(feature => {
                     const [lng, lat] = feature.geometry.coordinates;
-                    const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)})
-                        .bindPopup(createPopupContent(feature.properties))
-                        .on('click', () => {
-                            showDisasterInfo(feature.properties);
-                            marker.openPopup();
-                        });
+                    const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)});
+                    const popupContent = createPopupContent(feature.properties, marker);
+                    marker.bindPopup(popupContent, { 
+                        closeButton: false,
+                        autoClose: false,
+                        closeOnClick: false
+                    });
+                    marker.on('click', () => {
+                        marker.openPopup();
+                    });
                     layerGroup.addLayer(marker);
                 });
                 updateStatusBarMessage();
             }
 
-            function createPopupContent(properties) {
-                return `
-                    <div>
-                        <h3>${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)}</h3>
-                        <p><strong>위치:</strong> ${properties.country}</p>
-                        <p><strong>심각도:</strong> ${properties.severity}</p>
-                        <p><a href="#" onclick="showDetailedInfo('${properties.id}'); return false;">자세히 보기</a></p>
-                    </div>
+            function createPopupContent(properties, marker) {
+                const container = L.DomUtil.create('div');
+                container.innerHTML = `
+                    <h3>${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)}</h3>
+                    <p><strong>위치:</strong> ${properties.country}</p>
+                    <p><strong>심각도:</strong> ${properties.severity}</p>
+                    <p><strong>설명:</strong> ${properties.description}</p>
+                    <p><strong>발생 시각:</strong> ${properties.timestamp}</p>
                 `;
+                const closeButton = L.DomUtil.create('button', 'close-button', container);
+                closeButton.innerHTML = '닫기';
+                L.DomEvent.on(closeButton, 'click', function() {
+                    marker.closePopup();
+                });
+                return container;
             }
-
-            function showDetailedInfo(id) {
-                const feature = disasterData.features.find(f => f.properties.id === id);
-                if (feature) {
-                    showDisasterInfo(feature.properties);
-                }
-            }
-
-            function showDisasterInfo(properties) {
-                disasterPanelSubheader.textContent = `${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)} 정보`;
-                disasterPanelContent.innerHTML = `
-                    <div class="info-item">
-                        <span class="label">설명</span>
-                        <span class="value">${properties.description}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">심각도</span>
-                        <span class="value">${properties.severity}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">발생 시각</span>
-                        <span class="value">${properties.timestamp}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">국가</span>
-                        <span class="value">${properties.country}</span>
-                    </div>
-                `;
-                disasterPanel.dataset.currentId = properties.id;
-                openPanel();
-            }
-
-            function openPanel() {
-                disasterPanel.classList.add('open');
-                panelHandle.innerHTML = '<i class="fas fa-chevron-left"></i>';
-            }
-
-            function closePanel() {
-                disasterPanel.classList.remove('open');
-                panelHandle.innerHTML = '<i class="fas fa-chevron-right"></i>';
-                disasterPanel.dataset.currentId = '';
-            }
-
-            panelHandle.addEventListener('click', () => {
-                if (disasterPanel.classList.contains('open')) {
-                    closePanel();
-                } else {
-                    openPanel();
-                }
-            });
 
             function updateStatusBarMessage() {
                 const activeDisasters = layerGroup.getLayers().length;
@@ -682,14 +560,6 @@
 
             addMarkers();
         });
-
-        // showDetailedInfo 함수를 전역 스코프에 추가
-        function showDetailedInfo(id) {
-            const feature = disasterData.features.find(f => f.properties.id === id);
-            if (feature) {
-                showDisasterInfo(feature.properties);
-            }
-        }
     </script>
 </body>
 </html>
