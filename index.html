@@ -4,562 +4,112 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>재난 정보 지도</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
     <style>
-        /* 이전 스타일은 그대로 유지 */
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
         }
         #map {
-            position: absolute;
-            top: 0;
-            bottom: 30px;
-            left: 0;
-            right: 0;
-            z-index: 1;
+            width: 100%;
+            height: 100%;
         }
-        #statusBar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 30px;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            font-size: 14px;
-            z-index: 1000;
-        }
-        #coordinates {
-            flex: 1;
-        }
-        #message {
-            flex: 2;
-            text-align: center;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-        }
-        .custom-div-icon {
-            background: #FFD700;
-            border-radius: 50%;
-            text-align: center;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+        .custom-button {
             width: 30px;
             height: 30px;
-            line-height: 30px;
-        }
-        .leaflet-control-zoom {
-            margin-top: 50px !important;
-        }
-        .leaflet-control-home {
-            font-size: 18px;
-            text-align: center;
-            line-height: 30px;
-        }
-        .leaflet-popup-content-wrapper {
-            background-color: #000000;
-            color: #ffffff;
-            border-radius: 5px;
-            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
-            border: 2px solid #ffffff; /* 팝업창 테두리 추가 */
-        }
-        .leaflet-popup-content {
-            margin: 13px 19px;
-            line-height: 1.4;
-        }
-        .leaflet-popup-content p {
-            margin: 5px 0;
-        }
-        .leaflet-popup-tip-container {
-            width: 40px;
-            height: 20px;
-        }
-        .leaflet-popup-tip {
-            background-color: #000000;
-        }
-        .close-button {
-            display: block;
-            width: 100%;
-            padding: 5px;
-            background-color: #333333;
-            color: #ffffff;
-            text-align: center;
+            background-color: #fff;
+            border: 2px solid rgba(0,0,0,0.2);
+            background-clip: padding-box;
+            border-radius: 4px;
             cursor: pointer;
-            border: none;
-            border-radius: 3px;
-            margin-top: 10px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-        .leaflet-popup-close-button {
-            display: none;
+        .custom-button:active {
+            background-color: #ffffff;
+        }      
+        #homeButton {
+            position: absolute;
+            left: 10px;
+            top: 80px;
+            z-index: 1000;
+        }
+        #fullscreenButton {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            z-index: 1000;
+        }       
+        .custom-button img {
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="statusBar">
-        <div id="coordinates"></div>
-        <div id="message"></div>
+    <div id="homeButton" class="custom-button">
+        <img src="home.png" alt="홈" />
+    </div>
+    <div id="fullscreenButton" class="custom-button">
+        <img src="Big.png" alt="전체 화면" id="fullscreenIcon" />
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
-        const disasterData = {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI001",
-                        "type": "flood",
-                        "severity": "high",
-                        "timestamp": "2024-07-10T09:30:00Z",
-                        "description": "Severe flooding in Bangkok, Thailand",
-                        "country": "Thailand"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [100.5018, 13.7563]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI002",
-                        "type": "earthquake",
-                        "severity": "high",
-                        "timestamp": "2024-07-10T10:15:00Z",
-                        "description": "Major earthquake near Tokyo, Japan",
-                        "country": "Japan"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [139.6917, 35.6895]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI003",
-                        "type": "wildfire",
-                        "severity": "high",
-                        "timestamp": "2024-07-10T11:00:00Z",
-                        "description": "Massive wildfire in California, USA",
-                        "country": "United States"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-119.4179, 36.7783]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI004",
-                        "type": "hurricane",
-                        "severity": "high",
-                        "timestamp": "2024-07-10T12:30:00Z",
-                        "description": "Hurricane approaching Florida coast, USA",
-                        "country": "United States"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-81.5158, 27.6648]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI005",
-                        "type": "volcano",
-                        "severity": "medium",
-                        "timestamp": "2024-07-10T13:45:00Z",
-                        "description": "Mount Etna eruption, Sicily, Italy",
-                        "country": "Italy"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [14.9934, 37.7510]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI006",
-                        "type": "tsunami",
-                        "severity": "high",
-                        "timestamp": "2024-07-11T06:00:00Z",
-                        "description": "Tsunami warning for Indonesian coast",
-                        "country": "Indonesia"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [106.8456, -6.2088]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI007",
-                        "type": "avalanche",
-                        "severity": "medium",
-                        "timestamp": "2024-07-11T08:30:00Z",
-                        "description": "Avalanche in the Swiss Alps",
-                        "country": "Switzerland"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [8.2275, 46.8182]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI008",
-                        "type": "drought",
-                        "severity": "high",
-                        "timestamp": "2024-07-11T10:00:00Z",
-                        "description": "Severe drought in Ethiopia",
-                        "country": "Ethiopia"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [40.4897, 9.1450]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI009",
-                        "type": "blizzard",
-                        "severity": "high",
-                        "timestamp": "2024-07-11T12:15:00Z",
-                        "description": "Severe blizzard in Quebec, Canada",
-                        "country": "Canada"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-71.2082, 46.8139]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI010",
-                        "type": "cyclone",
-                        "severity": "high",
-                        "timestamp": "2024-07-11T14:30:00Z",
-                        "description": "Tropical cyclone approaching Madagascar",
-                        "country": "Madagascar"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [46.8691, -18.7669]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI011",
-                        "type": "landslide",
-                        "severity": "medium",
-                        "timestamp": "2024-07-12T03:45:00Z",
-                        "description": "Landslide in Rio de Janeiro, Brazil",
-                        "country": "Brazil"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-43.1729, -22.9068]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI012",
-                        "type": "heatwave",
-                        "severity": "high",
-                        "timestamp": "2024-07-12T07:20:00Z",
-                        "description": "Extreme heatwave in Delhi, India",
-                        "country": "India"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [77.2090, 28.6139]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI013",
-                        "type": "tornado",
-                        "severity": "high",
-                        "timestamp": "2024-07-12T15:10:00Z",
-                        "description": "Destructive tornado in Oklahoma, USA",
-                        "country": "United States"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-97.5164, 35.4676]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI014",
-                        "type": "flood",
-                        "severity": "medium",
-                        "timestamp": "2024-07-13T02:30:00Z",
-                        "description": "Flash floods in Karachi, Pakistan",
-                        "country": "Pakistan"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [67.0011, 24.8607]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI015",
-                        "type": "earthquake",
-                        "severity": "medium",
-                        "timestamp": "2024-07-13T11:45:00Z",
-                        "description": "Earthquake in Mexico City, Mexico",
-                        "country": "Mexico"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-99.1332, 19.4326]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI016",
-                        "type": "wildfire",
-                        "severity": "high",
-                        "timestamp": "2024-07-13T18:20:00Z",
-                        "description": "Bushfires in New South Wales, Australia",
-                        "country": "Australia"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [151.2093, -33.8688]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI017",
-                        "type": "volcano",
-                        "severity": "medium",
-                        "timestamp": "2024-07-14T05:10:00Z",
-                        "description": "Volcanic activity at Mount Vesuvius, Italy",
-                        "country": "Italy"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [14.4268, 40.8216]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI018",
-                        "type": "tsunami",
-                        "severity": "high",
-                        "timestamp": "2024-07-14T13:40:00Z",
-                        "description": "Tsunami alert for Chilean coast",
-                        "country": "Chile"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [-70.6483, -33.4569]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI019",
-                        "type": "extreme_cold",
-                        "severity": "high",
-                        "timestamp": "2024-07-14T21:15:00Z",
-                        "description": "Prolonged drought in Namibia",
-                        "country": "Namibia"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [17.0879, -22.5597]
-                    }
-                },
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "id": "GDI020",
-                        "type": "airplane_accident",
-                        "severity": "high",
-                        "timestamp": "2024-07-15T04:50:00Z",
-                        "description": "Cyclone approaching Bangladesh coast",
-                        "country": "Bangladesh"
-                    },
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [128.4125, 37.8103]
-                    }
-                }
-            ]
-        };
+        // 지도 초기화
+        var map = L.map('map').setView([36.5, 127.5], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
 
-        const disasterIcons = {
-            flood: { icon: 'fa-water', color: '#4287f5' },
-            earthquake: { icon: 'fa-house-damage', color: '#964B00' },
-            wildfire: { icon: 'fa-fire', color: '#FF4500' },
-            hurricane: { icon: 'fa-wind', color: '#00FFFF' },
-            volcano: { icon: 'fa-mountain', color: '#FF1493' },
-            tsunami: { icon: 'fa-wave-square', color: '#1E90FF' },
-            avalanche: { icon: 'fa-icicles', color: '#87CEEB' },
-            drought: { icon: 'fa-sun', color: '#FFA500' },
-            blizzard: { icon: 'fa-snowflake', color: '#87CEEB' },
-            cyclone: { icon: 'fa-wind', color: '#8A2BE2' },
-            landslide: { icon: 'fa-mountain', color: '#8B4513' },
-            heatwave: { icon: 'fa-temperature-high', color: '#FF6347' },
-            tornado: { icon: 'fa-umbrella', color: '#000000' }
-        };
+        // Rose API 호출 (가상의 함수)
+        function fetchDisasterData() {
+            // 실제 API 호출 대신 더미 데이터 사용
+            return [
+                { lat: 37.5665, lon: 126.9780, type: "flood", description: "서울 홍수 경보" },
+                { lat: 35.1796, lon: 129.0756, type: "earthquake", description: "부산 지진 발생" },
+                { lat: 35.8714, lon: 128.6014, type: "fire", description: "대구 산불 발생" }
+            ];
+        }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const southWest = L.latLng(-90, -180);
-            const northEast = L.latLng(90, 180);
-            const bounds = L.latLngBounds(southWest, northEast);
-
-            const map = L.map('map', {
-                center: [0, 0],
-                zoom: 2,
-                minZoom: 2,
-                maxZoom: 18,
-                worldCopyJump: true,
-                maxBoundsViscosity: 1.0
+        // 재난 정보 지도에 표시
+        function displayDisasters() {
+            var disasters = fetchDisasterData();
+            disasters.forEach(function(disaster) {
+                var marker = L.marker([disaster.lat, disaster.lon]).addTo(map);
+                marker.bindPopup("<b>" + disaster.type + "</b><br>" + disaster.description);
             });
+        }
 
-            const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                minZoom: 2,
-                maxZoom: 18,
-                noWrap: true,
-                bounds: bounds
-            }).addTo(map);
-
-            function updateMapSettings(zoom) {
-                if (zoom === map.getMinZoom()) {
-                    map.setMaxBounds(bounds);
-                    tileLayer.options.noWrap = true;
-                } else {
-                    map.setMaxBounds(null);
-                    tileLayer.options.noWrap = false;
-                }
-                tileLayer.redraw();
-            }
-
-            map.on('zoomend', function() {
-                updateMapSettings(map.getZoom());
-            });
-
-            updateMapSettings(map.getZoom());
-
-            const layerGroup = L.layerGroup().addTo(map);
-            const statusBar = document.getElementById('statusBar');
-            const coordinatesElement = document.getElementById('coordinates');
-            const messageElement = document.getElementById('message');
-
-            L.control.scale({
-                imperial: true,
-                metric: true,
-                position: 'bottomleft'
-            }).addTo(map);
-
-            L.Control.Home = L.Control.extend({
-                onAdd: function(map) {
-                    const button = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-home');
-                    button.innerHTML = '<a href="#" title="Reset View" role="button" aria-label="Reset View"><i class="fas fa-home"></i></a>';
-                    L.DomEvent.on(button, 'click', function(e) {
-                        e.preventDefault();
-                        map.setView([0, 0], 2);
-                    });
-                    return button;
-                }
-            });
-            L.control.home = function(opts) {
-                return new L.Control.Home(opts);
-            }
-            L.control.home({ position: 'topright' }).addTo(map);
-
-            function createCustomIcon(type) {
-                return L.divIcon({
-                    className: 'custom-div-icon',
-                    html: `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-                             <i class="fas ${disasterIcons[type].icon}" style="color: ${disasterIcons[type].color};"></i>
-                           </div>`,
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                });
-            }
-
-            function addMarkers() {
-                layerGroup.clearLayers();
-                disasterData.features.forEach(feature => {
-                    const [lng, lat] = feature.geometry.coordinates;
-                    const marker = L.marker([lat, lng], {icon: createCustomIcon(feature.properties.type)});
-                    const popupContent = createPopupContent(feature.properties, marker);
-                    marker.bindPopup(popupContent, { 
-                        closeButton: false,
-                        autoClose: false,
-                        closeOnClick: false
-                    });
-                    marker.on('click', () => {
-                        marker.openPopup();
-                    });
-                    layerGroup.addLayer(marker);
-                });
-                updateStatusBarMessage();
-            }
-
-            function createPopupContent(properties, marker) {
-                const container = L.DomUtil.create('div');
-                container.innerHTML = `
-                    <h3>${properties.type.charAt(0).toUpperCase() + properties.type.slice(1)}</h3>
-                    <p><strong>위치:</strong> ${properties.country}</p>
-                    <p><strong>심각도:</strong> ${properties.severity}</p>
-                    <p><strong>설명:</strong> ${properties.description}</p>
-                    <p><strong>발생 시각:</strong> ${properties.timestamp}</p>
-                `;
-                const closeButton = L.DomUtil.create('button', 'close-button', container);
-                closeButton.innerHTML = '닫기';
-                L.DomEvent.on(closeButton, 'click', function() {
-                    marker.closePopup();
-                });
-                return container;
-            }
-
-            function updateStatusBarMessage() {
-                const activeDisasters = layerGroup.getLayers().length;
-                messageElement.textContent = `현재 표시된 재난 수: ${activeDisasters}`;
-            }
-
-            map.on('mousemove', (e) => {
-                const {lat, lng} = e.latlng;
-                coordinatesElement.textContent = `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
-            });
-
-            window.addEventListener('resize', function() {
-                map.invalidateSize();
-            });
-
-            addMarkers();
+        // 홈 버튼 기능 - 단순히 초기 위치로 이동
+        document.getElementById('homeButton').addEventListener('click', function() {
+            map.setView([36.5, 127.5], 7);
         });
+
+        // 전체 화면 토글 기능
+        var fullscreenButton = document.getElementById('fullscreenButton');
+        var fullscreenIcon = document.getElementById('fullscreenIcon');
+        fullscreenButton.addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+                fullscreenIcon.src = 'Small.png';
+                fullscreenIcon.alt = '전체 화면 종료';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                    fullscreenIcon.src = 'Big.png';
+                    fullscreenIcon.alt = '전체 화면';
+                }
+            }
+        });
+
+        // 초기 재난 정보 로드
+        displayDisasters();
     </script>
 </body>
 </html>
