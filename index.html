@@ -28,9 +28,13 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            transition: background-color 0.3s ease;
+        }
+        .custom-button:hover {
+            background-color: #f4f4f4;
         }
         .custom-button:active {
-            background-color: #ffffff;
+            background-color: #dbdbdb;
         }      
         #homeButton {
             position: absolute;
@@ -49,12 +53,32 @@
             height: 20px;
             pointer-events: none;
         }
+        .leaflet-control-zoom-in,
+        .leaflet-control-zoom-out {
+            width: 30px !important;
+            height: 30px !important;
+            line-height: 30px !important;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
+        }
+        .rotating {
+            animation: spin 1.5s linear infinite;
+        }
+        #homeIcon.rotating {
+            filter: brightness(0) saturate(100%) invert(40%) sepia(98%) 
+                    saturate(1548%) hue-rotate(190deg) brightness(95%) contrast(101%);
+            filter: drop-shadow(0 0 1px #0056b3);
+            width: 24px;
+            height: 24px;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="homeButton" class="custom-button">
-        <img src="home.png" alt="홈" />
+        <img src="home.png" alt="홈" id="homeIcon" />
     </div>
     <div id="fullscreenButton" class="custom-button">
         <img src="Big.png" alt="전체 화면" id="fullscreenIcon" />
@@ -86,9 +110,22 @@
             });
         }
 
-        // 홈 버튼 기능 - 단순히 초기 위치로 이동
-        document.getElementById('homeButton').addEventListener('click', function() {
-            map.setView([36.5, 127.5], 7);
+        // 홈 버튼 기능 - 아이콘 변경 및 애니메이션과 함께 초기 위치로 이동
+        var homeButton = document.getElementById('homeButton');
+        var homeIcon = document.getElementById('homeIcon');
+        homeButton.addEventListener('click', function() {
+            homeIcon.src = 'circular_arrow.png';  // 회전 화살표 아이콘으로 변경
+            homeIcon.classList.add('rotating');
+            
+            map.flyTo([36.5, 127.5], 7, {
+                duration: 1.5,  // 1.5초 동안 애니메이션
+                easeLinearity: 0.25
+            });
+
+            setTimeout(function() {
+                homeIcon.src = 'home.png';  // 원래 아이콘으로 복귀
+                homeIcon.classList.remove('rotating');
+            }, 1500);
         });
 
         // 전체 화면 토글 기능
