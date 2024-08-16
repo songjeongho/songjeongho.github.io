@@ -3,150 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>재난 정보 지도</title>
+    <title>RSOE 재난 지도</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: Arial, sans-serif;
         }
-        #map {
-            width: 100%;
-            height: 100%;
+        #map { 
+            height: 100vh; 
+            width: 100%; 
         }
-        .custom-button {
-            width: 30px;
-            height: 30px;
-            background-color: #fff;
-            border: 2px solid rgba(0,0,0,0.2);
-            background-clip: padding-box;
-            border-radius: 4px;
-            cursor: pointer;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: background-color 0.3s ease;
+        .legend {
+            padding: 6px 8px;
+            font: 14px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            line-height: 24px;
+            color: #555;
         }
-        .custom-button:hover {
-            background-color: #f4f4f4;
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
         }
-        .custom-button:active {
-            background-color: #dbdbdb;
-        }      
-        #homeButton {
+        .legend .count {
+            font-weight: bold;
+        }
+        .controls {
             position: absolute;
-            left: 10px;
-            top: 80px;
-            z-index: 1000;
-        }
-        #fullscreenButton {
-            position: absolute;
-            right: 10px;
             top: 10px;
+            right: 10px;
             z-index: 1000;
-        }       
-        .custom-button img {
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-        }
-        .leaflet-control-zoom-in,
-        .leaflet-control-zoom-out {
-            width: 30px !important;
-            height: 30px !important;
-            line-height: 30px !important;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(-360deg); }
-        }
-        .rotating {
-            animation: spin 1.5s linear infinite;
-        }
-        #homeIcon.rotating {
-            filter: brightness(0) saturate(100%) invert(40%) sepia(98%) 
-                    saturate(1548%) hue-rotate(190deg) brightness(95%) contrast(101%);
-            filter: drop-shadow(0 0 1px #0056b3);
-            width: 24px;
-            height: 24px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="homeButton" class="custom-button">
-        <img src="home.png" alt="홈" id="homeIcon" />
-    </div>
-    <div id="fullscreenButton" class="custom-button">
-        <img src="Big.png" alt="전체 화면" id="fullscreenIcon" />
+    <div class="controls">
+        <label>
+            <input type="radio" name="view" value="cluster" checked> 클러스터링 보기
+        </label>
+        <label>
+            <input type="radio" name="view" value="individual"> 개별 보기
+        </label>
+        <button id="search">검색</button>
     </div>
 
     <script>
         // 지도 초기화
-        var map = L.map('map').setView([36.5, 127.5], 7);
+        var map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Rose API 호출 (가상의 함수)
-        function fetchDisasterData() {
-            // 실제 API 호출 대신 더미 데이터 사용
-            return [
-                { lat: 37.5665, lon: 126.9780, type: "flood", description: "서울 홍수 경보" },
-                { lat: 35.1796, lon: 129.0756, type: "earthquake", description: "부산 지진 발생" },
-                { lat: 35.8714, lon: 128.6014, type: "fire", description: "대구 산불 발생" }
-            ];
-        }
+        // 재난 유형과 아이콘 정의
+        var disasterTypes = {
+            "지진": { icon: "🌋", color: "#FF5733" },
+            "쓰나미": { icon: "🌊", color: "#3498DB" },
+            "화산": { icon: "🌋", color: "#E74C3C" },
+            "홍수": { icon: "🌊", color: "#3498DB" },
+            "산불": { icon: "🔥", color: "#E67E22" },
+            "태풍": { icon: "🌀", color: "#8E44AD" }
+        };
 
-        // 재난 정보 지도에 표시
-        function displayDisasters() {
-            var disasters = fetchDisasterData();
-            disasters.forEach(function(disaster) {
-                var marker = L.marker([disaster.lat, disaster.lon]).addTo(map);
-                marker.bindPopup("<b>" + disaster.type + "</b><br>" + disaster.description);
+        var markers = L.markerClusterGroup();
+        var individualMarkers = L.layerGroup();
+        var disasterCounts = {};
+
+        // 가상의 재난 데이터 생성 (실제로는 RSOE API에서 데이터를 가져와야 함)
+        var disasters = [
+            { type: "지진", lat: 35.6895, lon: 139.6917, description: "도쿄에서 규모 5.7 지진 발생" },
+            { type: "홍수", lat: 40.7128, lon: -74.0060, description: "뉴욕 시 홍수 경보" },
+            { type: "화산", lat: -8.6705, lon: 115.2126, description: "발리 화산 분화 위험" },
+            { type: "태풍", lat: 14.5995, lon: 120.9842, description: "마닐라 태풍 접근 중" },
+            { type: "산불", lat: -33.8688, lon: 151.2093, description: "시드니 근교 대형 산불 발생" }
+        ];
+
+        // 마커 생성 및 지도에 추가
+        disasters.forEach(function(disaster) {
+            var icon = L.divIcon({
+                html: disasterTypes[disaster.type].icon,
+                className: 'disaster-icon',
+                iconSize: [25, 25]
             });
-        }
 
-        // 홈 버튼 기능 - 아이콘 변경 및 애니메이션과 함께 초기 위치로 이동
-        var homeButton = document.getElementById('homeButton');
-        var homeIcon = document.getElementById('homeIcon');
-        homeButton.addEventListener('click', function() {
-            homeIcon.src = 'circular_arrow.png';  // 회전 화살표 아이콘으로 변경
-            homeIcon.classList.add('rotating');
-            
-            map.flyTo([36.5, 127.5], 7, {
-                duration: 1.5,  // 1.5초 동안 애니메이션
-                easeLinearity: 0.25
-            });
+            var marker = L.marker([disaster.lat, disaster.lon], {icon: icon})
+                .bindPopup(disaster.type + ": " + disaster.description);
 
-            setTimeout(function() {
-                homeIcon.src = 'home.png';  // 원래 아이콘으로 복귀
-                homeIcon.classList.remove('rotating');
-            }, 1500);
+            markers.addLayer(marker);
+            individualMarkers.addLayer(marker);
+
+            // 재난 유형별 카운트
+            disasterCounts[disaster.type] = (disasterCounts[disaster.type] || 0) + 1;
         });
 
-        // 전체 화면 토글 기능
-        var fullscreenButton = document.getElementById('fullscreenButton');
-        var fullscreenIcon = document.getElementById('fullscreenIcon');
-        fullscreenButton.addEventListener('click', function() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-                fullscreenIcon.src = 'Small.png';
-                fullscreenIcon.alt = '전체 화면 종료';
+        map.addLayer(markers);
+
+        // 범례 생성
+        var legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'legend');
+            var labels = [];
+            for (var type in disasterTypes) {
+                labels.push(
+                    '<i style="background:' + disasterTypes[type].color + '">' + disasterTypes[type].icon + '</i> ' +
+                    type + ' <span class="count">(' + (disasterCounts[type] || 0) + ')</span>'
+                );
+            }
+            div.innerHTML = labels.join('<br>');
+            return div;
+        };
+        legend.addTo(map);
+
+        // 클러스터링/개별 보기 전환
+        document.getElementById('search').addEventListener('click', function() {
+            var view = document.querySelector('input[name="view"]:checked').value;
+            map.removeLayer(markers);
+            map.removeLayer(individualMarkers);
+            if (view === 'cluster') {
+                map.addLayer(markers);
             } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                    fullscreenIcon.src = 'Big.png';
-                    fullscreenIcon.alt = '전체 화면';
-                }
+                map.addLayer(individualMarkers);
             }
         });
-
-        // 초기 재난 정보 로드
-        displayDisasters();
     </script>
 </body>
 </html>
