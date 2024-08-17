@@ -49,6 +49,45 @@
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
         }
+        .disaster-icon {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.8);
+            border: 2px solid #333;
+        }
+        .leaflet-popup-content-wrapper {
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+        }
+        .leaflet-popup-content {
+            margin: 15px 20px;
+            line-height: 1.4;
+        }
+        .popup-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .popup-description {
+            font-size: 14px;
+            color: #666;
+        }
+        .popup-severity {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .popup-date {
+            margin-top: 5px;
+            font-style: italic;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -77,7 +116,11 @@
             "화산": { icon: "🌋", color: "#E74C3C" },
             "홍수": { icon: "🌊", color: "#3498DB" },
             "산불": { icon: "🔥", color: "#E67E22" },
-            "태풍": { icon: "🌀", color: "#8E44AD" }
+            "태풍": { icon: "🌀", color: "#8E44AD" },
+            "폭설": { icon: "❄️", color: "#BDC3C7" },
+            "가뭄": { icon: "☀️", color: "#F1C40F" },
+            "토네이도": { icon: "🌪️", color: "#34495E" },
+            "산사태": { icon: "⛰️", color: "#795548" }
         };
 
         var markers = L.markerClusterGroup();
@@ -86,11 +129,16 @@
 
         // 가상의 재난 데이터 생성 (실제로는 RSOE API에서 데이터를 가져와야 함)
         var disasters = [
-            { type: "지진", lat: 35.6895, lon: 139.6917, description: "도쿄에서 규모 5.7 지진 발생" },
-            { type: "홍수", lat: 40.7128, lon: -74.0060, description: "뉴욕 시 홍수 경보" },
-            { type: "화산", lat: -8.6705, lon: 115.2126, description: "발리 화산 분화 위험" },
-            { type: "태풍", lat: 14.5995, lon: 120.9842, description: "마닐라 태풍 접근 중" },
-            { type: "산불", lat: -33.8688, lon: 151.2093, description: "시드니 근교 대형 산불 발생" }
+            { type: "지진", lat: 35.6895, lon: 139.6917, description: "도쿄에서 규모 5.7 지진 발생", severity: "중간", date: "2024-08-17 14:30:00" },
+            { type: "홍수", lat: 40.7128, lon: -74.0060, description: "뉴욕 시 홍수 경보", severity: "심각", date: "2024-08-16 09:15:00" },
+            { type: "화산", lat: -8.6705, lon: 115.2126, description: "발리 화산 분화 위험", severity: "위험", date: "2024-08-15 22:45:00" },
+            { type: "태풍", lat: 14.5995, lon: 120.9842, description: "마닐라 태풍 접근 중", severity: "매우 위험", date: "2024-08-17 03:00:00" },
+            { type: "산불", lat: -33.8688, lon: 151.2093, description: "시드니 근교 대형 산불 발생", severity: "심각", date: "2024-08-16 18:20:00" },
+            { type: "쓰나미", lat: -9.4318, lon: 159.9467, description: "솔로몬 제도 쓰나미 경보", severity: "위험", date: "2024-08-17 11:10:00" },
+            { type: "폭설", lat: 42.3601, lon: -71.0589, description: "보스턴 폭설 주의보", severity: "중간", date: "2024-08-15 20:30:00" },
+            { type: "가뭄", lat: -25.2744, lon: 133.7751, description: "호주 중부 극심한 가뭄", severity: "심각", date: "2024-08-14 08:00:00" },
+            { type: "토네이도", lat: 35.4676, lon: -97.5164, description: "오클라호마시티 토네이도 경보", severity: "위험", date: "2024-08-17 16:45:00" },
+            { type: "산사태", lat: 46.2276, lon: 2.2137, description: "프랑스 알프스 산사태 위험", severity: "중간", date: "2024-08-16 13:55:00" }
         ];
 
         // 마커 생성 및 지도에 추가
@@ -98,11 +146,24 @@
             var icon = L.divIcon({
                 html: disasterTypes[disaster.type].icon,
                 className: 'disaster-icon',
-                iconSize: [25, 25]
+                iconSize: [40, 40]
             });
 
+            var popupContent = `
+                <div class="popup-title">${disaster.type}</div>
+                <div class="popup-description">${disaster.description}</div>
+                <div class="popup-severity">심각도: ${disaster.severity}</div>
+                <div class="popup-date">발생 시간: ${disaster.date}</div>
+            `;
+
             var marker = L.marker([disaster.lat, disaster.lon], {icon: icon})
-                .bindPopup(disaster.type + ": " + disaster.description);
+                .bindPopup(popupContent, {
+                    maxWidth: 300,
+                    maxHeight: 300,
+                    autoPan: true,
+                    closeButton: true,
+                    autoPanPadding: [50, 50]
+                });
 
             markers.addLayer(marker);
             individualMarkers.addLayer(marker);
