@@ -2,205 +2,299 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSOE 재난 지도</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <title>전세계 수도 위치 지도 (종합판)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.4/leaflet.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            font-family: Arial, sans-serif;
+        #map { height: 900px; width: 100%; }
+        #controls { margin-top: 10px; }
+        select, button { font-size: 16px; padding: 5px; }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
         }
-        #map { 
-            height: 100vh; 
-            width: 100%; 
-        }
-        .legend {
-            padding: 6px 8px;
-            font: 14px Arial, Helvetica, sans-serif;
-            background: white;
-            background: rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-            border-radius: 5px;
-            line-height: 24px;
-            color: #555;
-        }
-        .legend i {
-            width: 18px;
-            height: 18px;
-            float: left;
-            margin-right: 8px;
-            opacity: 0.7;
-        }
-        .legend .count {
-            font-weight: bold;
-        }
-        .controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-        }
-        .disaster-icon {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            width: 40px !important;
-            height: 40px !important;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.8);
-            border: 2px solid #333;
-        }
-        .leaflet-popup-content-wrapper {
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 10px;
-            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
-        }
-        .leaflet-popup-content {
-            margin: 15px 20px;
-            line-height: 1.4;
-        }
-        .popup-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-        }
-        .popup-description {
-            font-size: 14px;
-            color: #666;
-        }
-        .popup-severity {
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        .popup-date {
-            margin-top: 5px;
-            font-style: italic;
-            color: #888;
+        .blinking-marker {
+            animation: blink 1s linear infinite;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div class="controls">
-        <label>
-            <input type="radio" name="view" value="cluster" checked> 클러스터링 보기
-        </label>
-        <label>
-            <input type="radio" name="view" value="individual"> 개별 보기
-        </label>
-        <button id="search">검색</button>
+    <div id="controls">
+        <select id="countrySelect">
+            <option value="">국가를 선택하세요</option>
+        </select>
+        <button id="goButton">이동</button>
     </div>
 
     <script>
-        // 지도 초기화
         var map = L.map('map').setView([0, 0], 2);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // 재난 유형과 아이콘 정의
-        var disasterTypes = {
-            "지진": { icon: "🌋", color: "#FF5733" },
-            "쓰나미": { icon: "🌊", color: "#3498DB" },
-            "화산": { icon: "🌋", color: "#E74C3C" },
-            "홍수": { icon: "🌊", color: "#3498DB" },
-            "산불": { icon: "🔥", color: "#E67E22" },
-            "태풍": { icon: "🌀", color: "#8E44AD" },
-            "폭설": { icon: "❄️", color: "#BDC3C7" },
-            "가뭄": { icon: "☀️", color: "#F1C40F" },
-            "토네이도": { icon: "🌪️", color: "#34495E" },
-            "산사태": { icon: "⛰️", color: "#795548" }
+        var tempMarker;
+
+        var countries = {
+            "가나": [5.5600, -0.2057],
+            "가봉": [0.4162, 9.4673],
+            "가이아나": [6.8013, -58.1551],
+            "감비아": [13.4549, -16.5790],
+            "과테말라": [14.6349, -90.5069],
+            "그레나다": [12.0564, -61.7485],
+            "그리스": [37.9838, 23.7275],
+            "기니": [9.6412, -13.5784],
+            "기니비사우": [11.8037, -15.1804],
+            "나미비아": [-22.5609, 17.0658],
+            "나우루": [-0.5228, 166.9315],
+            "나이지리아": [9.0765, 7.3986],
+            "남수단": [4.8594, 31.5713],
+            "남아프리카공화국": [-25.7461, 28.1881],
+            "네덜란드": [52.3676, 4.9041],
+            "네팔": [27.7172, 85.3240],
+            "노르웨이": [59.9139, 10.7522],
+            "뉴질랜드": [-41.2865, 174.7762],
+            "니제르": [13.5137, 2.1098],
+            "니카라과": [12.1150, -86.2362],
+            "대한민국": [37.5665, 126.9780],
+            "덴마크": [55.6761, 12.5683],
+            "도미니카 공화국": [18.4861, -69.9312],
+            "도미니카 연방": [15.3010, -61.3881],
+            "독일": [52.5200, 13.4050],
+            "동티모르": [-8.5586, 125.5736],
+            "라오스": [17.9757, 102.6331],
+            "라이베리아": [6.3004, -10.7969],
+            "라트비아": [56.9496, 24.1052],
+            "러시아": [55.7558, 37.6173],
+            "레바논": [33.8938, 35.5018],
+            "레소토": [-29.3142, 27.4833],
+            "루마니아": [44.4268, 26.1025],
+            "룩셈부르크": [49.6116, 6.1319],
+            "르완다": [-1.9403, 30.0596],
+            "리비아": [32.8872, 13.1913],
+            "리투아니아": [54.6872, 25.2797],
+            "리히텐슈타인": [47.1410, 9.5209],
+            "마다가스카르": [-18.8792, 47.5079],
+            "마셜 제도": [7.1164, 171.1854],
+            "말라위": [-13.9631, 33.7741],
+            "말레이시아": [3.1390, 101.6869],
+            "말리": [12.6392, -8.0029],
+            "멕시코": [19.4326, -99.1332],
+            "모나코": [43.7384, 7.4246],
+            "모로코": [34.0209, -6.8416],
+            "모리셔스": [-20.1609, 57.5012],
+            "모리타니": [18.0735, -15.9582],
+            "모잠비크": [-25.9692, 32.5732],
+            "몬테네그로": [42.4304, 19.2594],
+            "몰도바": [47.0105, 28.8638],
+            "몰디브": [4.1755, 73.5093],
+            "몰타": [35.8989, 14.5146],
+            "몽골": [47.8864, 106.9057],
+            "미국": [38.9072, -77.0369],
+            "미얀마": [19.7633, 96.0785],
+            "미크로네시아": [6.9248, 158.1618],
+            "바누아투": [-17.7404, 168.3216],
+            "바레인": [26.2285, 50.5860],
+            "바베이도스": [13.1939, -59.5432],
+            "바티칸 시국": [41.9029, 12.4534],
+            "바하마": [25.0480, -77.3554],
+            "방글라데시": [23.8103, 90.4125],
+            "베네수엘라": [10.4806, -66.9036],
+            "베냉": [6.4969, 2.6283],
+            "베트남": [21.0285, 105.8542],
+            "벨기에": [50.8503, 4.3517],
+            "벨라루스": [53.9045, 27.5615],
+            "벨리즈": [17.2534, -88.7713],
+            "보스니아 헤르체고비나": [43.8564, 18.4131],
+            "보츠와나": [-24.6282, 25.9231],
+            "볼리비아": [-16.4897, -68.1193],
+            "부룬디": [-3.3731, 29.9189],
+            "부르키나파소": [12.3714, -1.5197],
+            "부탄": [27.4728, 89.6390],
+            "북마케도니아": [42.0024, 21.4361],
+            "불가리아": [42.6977, 23.3219],
+            "브라질": [-15.7801, -47.9292],
+            "브루나이": [4.9031, 114.9398],
+            "사모아": [-13.8506, -171.7513],
+            "사우디아라비아": [24.7136, 46.6753],
+            "산마리노": [43.9424, 12.4578],
+            "상투메 프린시페": [0.3301, 6.7332],
+            "세네갈": [14.7645, -17.3660],
+            "세르비아": [44.7866, 20.4489],
+            "세이셸": [-4.6191, 55.4513],
+            "세인트루시아": [14.0101, -60.9970],
+            "세인트빈센트 그레나딘": [13.1586, -61.2248],
+            "세인트키츠 네비스": [17.3026, -62.7177],
+            "소말리아": [2.0469, 45.3182],
+            "솔로몬 제도": [-9.4456, 159.9728],
+            "수단": [15.5007, 32.5599],
+            "수리남": [5.8520, -55.2038],
+            "스리랑카": [6.9271, 79.8612],
+            "스웨덴": [59.3293, 18.0686],
+            "스위스": [46.9480, 7.4474],
+            "스페인": [40.4168, -3.7038],
+            "슬로바키아": [48.1486, 17.1077],
+            "슬로베니아": [46.0569, 14.5058],
+            "시리아": [33.5138, 36.2765],
+            "시에라리온": [8.4846, -13.2299],
+            "싱가포르": [1.3521, 103.8198],
+            "아랍에미리트": [24.4539, 54.3773],
+            "아르메니아": [40.1776, 44.5126],
+            "아르헨티나": [-34.6037, -58.3816],
+            "아이슬란드": [64.1265, -21.8174],
+            "아이티": [18.5944, -72.3074],
+            "아일랜드": [53.3498, -6.2603],
+            "아제르바이잔": [40.4093, 49.8671],
+            "아프가니스탄": [34.5553, 69.2075],
+            "안도라": [42.5063, 1.5218],
+            "알바니아": [41.3275, 19.8187],
+            "알제리": [36.7538, 3.0588],
+            "앙골라": [-8.8399, 13.2894],
+            "앤티가 바부다": [17.1275, -61.8468],
+            "에리트레아": [15.3229, 38.9251],
+            "에스와티니": [-26.3054, 31.1367],
+            "에스토니아": [59.4370, 24.7536],
+            "에콰도르": [-0.1807, -78.4678],
+            "에티오피아": [9.0050, 38.7638],
+            "엘살바도르": [13.6929, -89.2182],
+            "영국": [51.5074, -0.1278],
+            "예멘": [15.3694, 44.1910],
+            "오만": [23.5859, 58.4059],
+            "오스트리아": [48.2082, 16.3738],
+            "온두라스": [14.0723, -87.1921],
+            "요르단": [31.9454, 35.9284],
+            "우간다": [0.3476, 32.5825],
+            "우루과이": [-34.9011, -56.1915],
+            "우즈베키스탄": [41.3117, 69.2949],
+            "우크라이나": [50.4501, 30.5234],
+            "이라크": [33.3152, 44.3661],
+            "이란": [35.6892, 51.3890],
+            "이스라엘": [31.7683, 35.2137],
+            "이집트": [30.0444, 31.2357],
+            "이탈리아": [41.9028, 12.4964],
+            "인도": [28.6139, 77.2090],
+            "인도네시아": [-6.2088, 106.8456],
+            "일본": [35.6762, 139.6503],
+            "자메이카": [18.0179, -76.8099],
+            "잠비아": [-15.3875, 28.3228],
+            "적도 기니": [3.7523, 8.7742],
+            "조지아": [41.7151, 44.8271],
+            "중국": [39.9042, 116.4074],
+            "중앙아프리카 공화국": [4.3947, 18.5582],
+            "지부티": [11.5886, 43.1456],
+            "짐바브웨": [-17.8292, 31.0522],
+            "차드": [12.1348, 15.0557],
+            "체코": [50.0755, 14.4378],
+            "칠레": [-33.4489, -70.6693],
+            "카메룬": [3.8480, 11.5021],
+            "카보베르데": [14.9333, -23.5133],
+            "카자흐스탄": [51.1605, 71.4704],
+            "카타르": [25.2854, 51.5310],
+            "캄보디아": [11.5564, 104.9282],
+            "캐나다": [45.4215, -75.6972],
+            "케냐": [-1.2921, 36.8219],
+            "코모로": [-11.6455, 43.3333],
+            "코스타리카": [9.9281, -84.0907],
+            "코트디부아르": [6.8276, -5.2893],
+            "콜롬비아": [4.7110, -74.0721],
+            "콩고 공화국": [-4.2634, 15.2429],
+            "콩고 민주 공화국": [-4.4419, 15.2663],
+            "쿠바": [23.1136, -82.3666],
+            "쿠웨이트": [29.3759, 47.9774],
+            "크로아티아": [45.8150, 15.9819],
+            "키르기스스탄": [42.8746, 74.5698],
+            "키리바시": [1.3282, 172.9784],
+            "타지키스탄": [38.5598, 68.7870],
+            "탄자니아": [-6.1629, 35.7516],
+            "태국": [13.7563, 100.5018],
+            "토고": [6.1375, 1.2123],
+            "통가": [-21.1399, -175.2026],
+            "투르크메니스탄": [37.9601, 58.3261],
+            "투발루": [-8.5211, 179.1962],
+            "튀니지": [36.8065, 10.1815],
+            "터키": [39.9334, 32.8597],
+            "트리니다드 토바고": [10.6596, -61.5169],
+            "파나마": [8.9824, -79.5199],
+            "파라과이": [-25.2867, -57.3333],
+            "파키스탄": [33.6844, 73.0479],
+            "파푸아뉴기니": [-9.4438, 147.1803],
+            "팔라우": [7.5000, 134.6238],
+            "페루": [-12.0432, -77.0282],
+            "포르투갈": [38.7223, -9.1393],
+            "폴란드": [52.2297, 21.0122],
+            "프랑스": [48.8566, 2.3522],
+            "피지": [-18.1416, 178.4419],
+            "핀란드": [60.1699, 24.9384],
+            "필리핀": [14.5995, 120.9842],
+            "헝가리": [47.4979, 19.0402],
+            "호주": [-35.2809, 149.1300]
         };
 
-        var markers = L.markerClusterGroup();
-        var individualMarkers = L.layerGroup();
-        var disasterCounts = {};
+        var select = document.getElementById('countrySelect');
+        var sortedCountries = Object.keys(countries).sort();
+        
+        for (var i = 0; i < sortedCountries.length; i++) {
+            var country = sortedCountries[i];
+            var option = document.createElement('option');
+            option.value = country;
+            option.textContent = country;
+            select.appendChild(option);
+        }
 
-        // 가상의 재난 데이터 생성 (실제로는 RSOE API에서 데이터를 가져와야 함)
-        var disasters = [
-            { type: "지진", lat: 35.6895, lon: 139.6917, description: "도쿄에서 규모 5.7 지진 발생", severity: "중간", date: "2024-08-17 14:30:00" },
-            { type: "홍수", lat: 40.7128, lon: -74.0060, description: "뉴욕 시 홍수 경보", severity: "심각", date: "2024-08-16 09:15:00" },
-            { type: "화산", lat: -8.6705, lon: 115.2126, description: "발리 화산 분화 위험", severity: "위험", date: "2024-08-15 22:45:00" },
-            { type: "태풍", lat: 14.5995, lon: 120.9842, description: "마닐라 태풍 접근 중", severity: "매우 위험", date: "2024-08-17 03:00:00" },
-            { type: "산불", lat: -33.8688, lon: 151.2093, description: "시드니 근교 대형 산불 발생", severity: "심각", date: "2024-08-16 18:20:00" },
-            { type: "쓰나미", lat: -9.4318, lon: 159.9467, description: "솔로몬 제도 쓰나미 경보", severity: "위험", date: "2024-08-17 11:10:00" },
-            { type: "폭설", lat: 42.3601, lon: -71.0589, description: "보스턴 폭설 주의보", severity: "중간", date: "2024-08-15 20:30:00" },
-            { type: "가뭄", lat: -25.2744, lon: 133.7751, description: "호주 중부 극심한 가뭄", severity: "심각", date: "2024-08-14 08:00:00" },
-            { type: "토네이도", lat: 35.4676, lon: -97.5164, description: "오클라호마시티 토네이도 경보", severity: "위험", date: "2024-08-17 16:45:00" },
-            { type: "산사태", lat: 46.2276, lon: 2.2137, description: "프랑스 알프스 산사태 위험", severity: "중간", date: "2024-08-16 13:55:00" }
-        ];
-
-        // 마커 생성 및 지도에 추가
-        disasters.forEach(function(disaster) {
-            var icon = L.divIcon({
-                html: disasterTypes[disaster.type].icon,
-                className: 'disaster-icon',
-                iconSize: [40, 40]
-            });
-
-            var popupContent = `
-                <div class="popup-title">${disaster.type}</div>
-                <div class="popup-description">${disaster.description}</div>
-                <div class="popup-severity">심각도: ${disaster.severity}</div>
-                <div class="popup-date">발생 시간: ${disaster.date}</div>
-            `;
-
-            var marker = L.marker([disaster.lat, disaster.lon], {icon: icon})
-                .bindPopup(popupContent, {
-                    maxWidth: 300,
-                    maxHeight: 300,
-                    autoPan: true,
-                    closeButton: true,
-                    autoPanPadding: [50, 50]
+        function goToSelectedCountry() {
+            var country = select.value;
+            if (country) {
+                var coordinates = countries[country];
+                var lat = coordinates[0];
+                var lon = coordinates[1];
+                
+                map.flyTo([lat, lon], 4, {
+                    duration: 2,
+                    easeLinearity: 0.1
                 });
 
-            markers.addLayer(marker);
-            individualMarkers.addLayer(marker);
-
-            // 재난 유형별 카운트
-            disasterCounts[disaster.type] = (disasterCounts[disaster.type] || 0) + 1;
-        });
-
-        map.addLayer(markers);
-
-        // 범례 생성
-        var legend = L.control({position: 'bottomright'});
-        legend.onAdd = function (map) {
-            var div = L.DomUtil.create('div', 'legend');
-            var labels = [];
-            for (var type in disasterTypes) {
-                labels.push(
-                    '<i style="background:' + disasterTypes[type].color + '">' + disasterTypes[type].icon + '</i> ' +
-                    type + ' <span class="count">(' + (disasterCounts[type] || 0) + ')</span>'
-                );
-            }
-            div.innerHTML = labels.join('<br>');
-            return div;
-        };
-        legend.addTo(map);
-
-        // 클러스터링/개별 보기 전환
-        document.getElementById('search').addEventListener('click', function() {
-            var view = document.querySelector('input[name="view"]:checked').value;
-            map.removeLayer(markers);
-            map.removeLayer(individualMarkers);
-            if (view === 'cluster') {
-                map.addLayer(markers);
+                setTimeout(function() {
+                    map.flyTo([lat, lon], 6, {
+                        duration: 1,
+                        easeLinearity: 0.1
+                    });
+                    
+                    setTimeout(function() {
+                        showTemporaryMarker([lat, lon]);
+                    }, 1000);
+                }, 2000);
             } else {
-                map.addLayer(individualMarkers);
+                alert('국가를 선택해주세요.');
             }
-        });
+        }
+
+        function showTemporaryMarker(coordinates) {
+            if (tempMarker) {
+                map.removeLayer(tempMarker);
+            }
+
+            var redArrowIcon = L.icon({
+                iconUrl: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.4/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+
+            tempMarker = L.marker(coordinates, {icon: redArrowIcon}).addTo(map);
+            tempMarker._icon.classList.add("blinking-marker");
+
+            setTimeout(function() {
+                map.removeLayer(tempMarker);
+            }, 3000);
+        }
+
+        document.getElementById('goButton').onclick = goToSelectedCountry;
     </script>
 </body>
 </html>
