@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaflet Map - Centered on Korea</title>
+    <title>Leaflet Map - 대한민국과 태평양의 넓은 뷰</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
     <style>
@@ -26,9 +26,9 @@
     <div id="map"></div>
     <script>
         var map = L.map('map', {
-            center: [36, 128],  // 한국의 중심 좌표로 변경
-            zoom: 4,  // 한국이 잘 보이도록 줌 레벨 조정
-            minZoom: 3,  // 최소 줌 레벨을 3으로 설정하여 너무 멀리 줌아웃되지 않도록 함
+            center: [0, 0],  // 중심 좌표를 조금 더 남쪽과 동쪽으로 이동
+            zoom: 1,  // 줌 레벨을 2로 낮춰 더 넓은 영역이 보이도록 함
+            minZoom: 1,
             maxZoom: 11,
             maxBounds: [[-90, -180], [90, 180]],
             maxBoundsViscosity: 1.0,
@@ -48,7 +48,7 @@
             var widthRatio = mapSize.x / 512;
             var heightRatio = mapSize.y / 512;
             var newZoom = Math.ceil(Math.log2(Math.max(widthRatio, heightRatio))) + 1;
-            map.setMinZoom(Math.max(newZoom, 3));  // 최소 줌 레벨을 3으로 제한
+            map.setMinZoom(Math.max(newZoom, 1));
         }
 
         map.on('resize', updateMapView);
