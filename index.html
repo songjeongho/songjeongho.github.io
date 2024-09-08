@@ -2,330 +2,57 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>전세계 수도 위치 지도 (종합판 - 확장)</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.4/leaflet.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.4/leaflet.js"></script>
+    <title>Leaflet Map - Centered on Korea</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
     <style>
-        #map { height: 900px; width: 100%; }
-        #controls { margin-top: 10px; }
-        select, button { font-size: 16px; padding: 5px; }
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0; }
-            100% { opacity: 1; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
-        .blinking-marker {
-            animation: blink 1s linear infinite;
+        #map {
+            height: 100%;
+            width: 100%;
         }
-        .country-label {
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            border: none;
-            border-radius: 3px;
-            padding: 3px 5px;
-            font-size: 12px;
-            font-weight: bold;
-            white-space: nowrap;
-            display: inline-block;
+        .leaflet-container {
+            background-color: rgba(0,0,0,0);
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="controls">
-        <select id="countrySelect">
-            <option value="">국가를 선택하세요</option>
-        </select>
-        <button id="goButton">이동</button>
-    </div>
-
     <script>
-        var map = L.map('map').setView([0, 0], 2);
+        var map = L.map('map', {
+            center: [36, 128],  // 한국의 중심 좌표로 변경
+            zoom: 4,  // 한국이 잘 보이도록 줌 레벨 조정
+            minZoom: 3,  // 최소 줌 레벨을 3으로 설정하여 너무 멀리 줌아웃되지 않도록 함
+            maxZoom: 11,
+            maxBounds: [[-90, -180], [90, 180]],
+            maxBoundsViscosity: 1.0,
+            worldCopyJump: true,
+            noWrap: false,
+            crs: L.CRS.EPSG3857
+        });
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '© OpenStreetMap contributors',
+            noWrap: true,
+            bounds: [[-90, -180], [90, 180]]
         }).addTo(map);
 
-        var tempMarker, countryLabel;
-
-        var countries = {
-            "가나": [5.5600, -0.2057],
-            "가봉": [0.4162, 9.4673],
-            "가이아나": [6.8013, -58.1551],
-            "감비아": [13.4549, -16.5790],
-            "과테말라": [14.6349, -90.5069],
-            "그레나다": [12.0564, -61.7485],
-            "그리스": [37.9838, 23.7275],
-            "기니": [9.6412, -13.5784],
-            "기니비사우": [11.8037, -15.1804],
-            "나미비아": [-22.5609, 17.0658],
-            "나우루": [-0.5228, 166.9315],
-            "나이지리아": [9.0765, 7.3986],
-            "남수단": [4.8594, 31.5713],
-            "남아프리카공화국": [-25.7461, 28.1881],
-            "네덜란드": [52.3676, 4.9041],
-            "네팔": [27.7172, 85.3240],
-            "노르웨이": [59.9139, 10.7522],
-            "뉴질랜드": [-41.2865, 174.7762],
-            "니제르": [13.5137, 2.1098],
-            "니카라과": [12.1150, -86.2362],
-            "대한민국": [37.5665, 126.9780],
-            "덴마크": [55.6761, 12.5683],
-            "도미니카 공화국": [18.4861, -69.9312],
-            "도미니카 연방": [15.3010, -61.3881],
-            "독일": [52.5200, 13.4050],
-            "동티모르": [-8.5586, 125.5736],
-            "라오스": [17.9757, 102.6331],
-            "라이베리아": [6.3004, -10.7969],
-            "라트비아": [56.9496, 24.1052],
-            "러시아": [55.7558, 37.6173],
-            "레바논": [33.8938, 35.5018],
-            "레소토": [-29.3142, 27.4833],
-            "루마니아": [44.4268, 26.1025],
-            "룩셈부르크": [49.6116, 6.1319],
-            "르완다": [-1.9403, 30.0596],
-            "리비아": [32.8872, 13.1913],
-            "리투아니아": [54.6872, 25.2797],
-            "리히텐슈타인": [47.1410, 9.5209],
-            "마다가스카르": [-18.8792, 47.5079],
-            "마셜 제도": [7.1164, 171.1854],
-            "말라위": [-13.9631, 33.7741],
-            "말레이시아": [3.1390, 101.6869],
-            "말리": [12.6392, -8.0029],
-            "멕시코": [19.4326, -99.1332],
-            "모나코": [43.7384, 7.4246],
-            "모로코": [34.0209, -6.8416],
-            "모리셔스": [-20.1609, 57.5012],
-            "모리타니": [18.0735, -15.9582],
-            "모잠비크": [-25.9692, 32.5732],
-            "몬테네그로": [42.4304, 19.2594],
-            "몰도바": [47.0105, 28.8638],
-            "몰디브": [4.1755, 73.5093],
-            "몰타": [35.8989, 14.5146],
-            "몽골": [47.8864, 106.9057],
-            "미국": [38.9072, -77.0369],
-            "미얀마": [19.7633, 96.0785],
-            "미크로네시아": [6.9248, 158.1618],
-            "바누아투": [-17.7404, 168.3216],
-            "바레인": [26.2285, 50.5860],
-            "바베이도스": [13.1939, -59.5432],
-            "바티칸 시국": [41.9029, 12.4534],
-            "바하마": [25.0480, -77.3554],
-            "방글라데시": [23.8103, 90.4125],
-            "베네수엘라": [10.4806, -66.9036],
-            "베냉": [6.4969, 2.6283],
-            "베트남": [21.0285, 105.8542],
-            "벨기에": [50.8503, 4.3517],
-            "벨라루스": [53.9045, 27.5615],
-            "벨리즈": [17.2534, -88.7713],
-            "보스니아 헤르체고비나": [43.8564, 18.4131],
-            "보츠와나": [-24.6282, 25.9231],
-            "볼리비아": [-16.4897, -68.1193],
-            "부룬디": [-3.3731, 29.9189],
-            "부르키나파소": [12.3714, -1.5197],
-            "부탄": [27.4728, 89.6390],
-            "북마케도니아": [42.0024, 21.4361],
-            "불가리아": [42.6977, 23.3219],
-            "브라질": [-15.7801, -47.9292],
-            "브루나이": [4.9031, 114.9398],
-            "사모아": [-13.8506, -171.7513],
-            "사우디아라비아": [24.7136, 46.6753],
-            "산마리노": [43.9424, 12.4578],
-            "상투메 프린시페": [0.3301, 6.7332],
-            "세네갈": [14.7645, -17.3660],
-            "세르비아": [44.7866, 20.4489],
-            "세이셸": [-4.6191, 55.4513],
-            "세인트루시아": [14.0101, -60.9970],
-            "세인트빈센트 그레나딘": [13.1586, -61.2248],
-            "세인트키츠 네비스": [17.3026, -62.7177],
-            "소말리아": [2.0469, 45.3182],
-            "솔로몬 제도": [-9.4456, 159.9728],
-            "수단": [15.5007, 32.5599],
-            "수리남": [5.8520, -55.2038],
-            "스리랑카": [6.9271, 79.8612],
-            "스웨덴": [59.3293, 18.0686],
-            "스위스": [46.9480, 7.4474],
-            "스페인": [40.4168, -3.7038],
-            "슬로바키아": [48.1486, 17.1077],
-            "슬로베니아": [46.0569, 14.5058],
-            "시리아": [33.5138, 36.2765],
-            "시에라리온": [8.4846, -13.2299],
-            "싱가포르": [1.3521, 103.8198],
-            "아랍에미리트": [24.4539, 54.3773],
-            "아르메니아": [40.1776, 44.5126],
-            "아르헨티나": [-34.6037, -58.3816],
-            "아이슬란드": [64.1265, -21.8174],
-            "아이티": [18.5944, -72.3074],
-            "아일랜드": [53.3498, -6.2603],
-            "아제르바이잔": [40.4093, 49.8671],
-            "아프가니스탄": [34.5553, 69.2075],
-            "안도라": [42.5063, 1.5218],
-            "알바니아": [41.3275, 19.8187],
-            "알제리": [36.7538, 3.0588],
-            "앙골라": [-8.8399, 13.2894],
-            "앤티가 바부다": [17.1275, -61.8468],
-            "에리트레아": [15.3229, 38.9251],
-            "에스와티니": [-26.3054, 31.1367],
-            "에스토니아": [59.4370, 24.7536],
-            "에콰도르": [-0.1807, -78.4678],
-            "에티오피아": [9.0050, 38.7638],
-            "엘살바도르": [13.6929, -89.2182],
-            "영국": [51.5074, -0.1278],
-            "예멘": [15.3694, 44.1910],
-            "오만": [23.5859, 58.4059],
-            "오스트리아": [48.2082, 16.3738],
-            "온두라스": [14.0723, -87.1921],
-            "요르단": [31.9454, 35.9284],
-            "우간다": [0.3476, 32.5825],
-            "우루과이": [-34.9011, -56.1915],
-            "우즈베키스탄": [41.3117, 69.2949],
-            "우크라이나": [50.4501, 30.5234],
-            "이라크": [33.3152, 44.3661],
-            "이란": [35.6892, 51.3890],
-            "이스라엘": [31.7683, 35.2137],
-            "이집트": [30.0444, 31.2357],
-            "이탈리아": [41.9028, 12.4964],
-            "인도": [28.6139, 77.2090],
-            "인도네시아": [-6.2088, 106.8456],
-            "일본": [35.6762, 139.6503],
-            "자메이카": [18.0179, -76.8099],
-            "잠비아": [-15.3875, 28.3228],
-            "적도 기니": [3.7523, 8.7742],
-            "조지아": [41.7151, 44.8271],
-            "중국": [39.9042, 116.4074],
-            "중앙아프리카 공화국": [4.3947, 18.5582],
-            "지부티": [11.5886, 43.1456],
-            "짐바브웨": [-17.8292, 31.0522],
-            "차드": [12.1348, 15.0557],
-            "체코": [50.0755, 14.4378],
-            "칠레": [-33.4489, -70.6693],
-            "카메룬": [3.8480, 11.5021],
-            "카보베르데": [14.9333, -23.5133],
-            "카자흐스탄": [51.1605, 71.4704],
-            "카타르": [25.2854, 51.5310],
-            "캄보디아": [11.5564, 104.9282],
-            "캐나다": [45.4215, -75.6972],
-            "케냐": [-1.2921, 36.8219],
-            "코모로": [-11.6455, 43.3333],
-            "콩고 공화국": [-4.2634, 15.2429],
-            "콩고 민주 공화국": [-4.4419, 15.2663],
-            "쿠바": [23.1136, -82.3666],
-            "쿠웨이트": [29.3759, 47.9774],
-            "크로아티아": [45.8150, 15.9819],
-            "키르기스스탄": [42.8746, 74.5698],
-            "키리바시": [1.3282, 172.9784],
-            "타지키스탄": [38.5598, 68.7870],
-            "탄자니아": [-6.1629, 35.7516],
-            "태국": [13.7563, 100.5018],
-            "토고": [6.1375, 1.2123],
-            "통가": [-21.1399, -175.2026],
-            "투르크메니스탄": [37.9601, 58.3261],
-            "투발루": [-8.5211, 179.1962],
-            "튀니지": [36.8065, 10.1815],
-            "터키": [39.9334, 32.8597],
-            "트리니다드 토바고": [10.6596, -61.5169],
-            "파나마": [8.9824, -79.5199],
-            "파라과이": [-25.2867, -57.3333],
-            "파키스탄": [33.6844, 73.0479],
-            "파푸아뉴기니": [-9.4438, 147.1803],
-            "팔라우": [7.5000, 134.6238],
-            "페루": [-12.0432, -77.0282],
-            "포르투갈": [38.7223, -9.1393],
-            "폴란드": [52.2297, 21.0122],
-            "프랑스": [48.8566, 2.3522],
-            "피지": [-18.1416, 178.4419],
-            "핀란드": [60.1699, 24.9384],
-            "필리핀": [14.5995, 120.9842],
-            "헝가리": [47.4979, 19.0402],
-            "호주": [-35.2809, 149.1300]
-        };
-
-        var select = document.getElementById('countrySelect');
-        var sortedCountries = Object.keys(countries).sort();
-        
-        for (var i = 0; i < sortedCountries.length; i++) {
-            var country = sortedCountries[i];
-            var option = document.createElement('option');
-            option.value = country;
-            option.textContent = country;
-            select.appendChild(option);
+        function updateMapView() {
+            var mapSize = map.getSize();
+            var widthRatio = mapSize.x / 512;
+            var heightRatio = mapSize.y / 512;
+            var newZoom = Math.ceil(Math.log2(Math.max(widthRatio, heightRatio))) + 1;
+            map.setMinZoom(Math.max(newZoom, 3));  // 최소 줌 레벨을 3으로 제한
         }
 
-        function goToSelectedCountry() {
-            var country = select.value;
-            if (country) {
-                var coordinates = countries[country];
-                var lat = coordinates[0];
-                var lon = coordinates[1];
-                
-                map.flyTo([lat, lon], 6, {
-                    duration: 3,
-                    easeLinearity: 0.5
-                });
-
-                setTimeout(function() {
-                    map.flyTo([lat, lon], 8, {
-                        duration: 1.5,
-                        easeLinearity: 0.5
-                    });
-                    
-                    setTimeout(function() {
-                        showTemporaryMarker([lat, lon]);
-                        showCountryLabel(country, [lat, lon]);
-                    }, 1000);
-                }, 2000);
-            } else {
-                alert('국가를 선택해주세요.');
-            }
-        }
-
-        function showTemporaryMarker(coordinates) {
-            if (tempMarker) {
-                map.removeLayer(tempMarker);
-            }
-
-            var redArrowIcon = L.icon({
-                iconUrl: 'marker-icon-2x-red.png',
-                shadowUrl: 'marker-shadow.png',
-                iconSize: [20, 31],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [31, 31]
-            });
-
-            tempMarker = L.marker(coordinates, {icon: redArrowIcon}).addTo(map);
-            tempMarker._icon.classList.add("blinking-marker");
-
-            setTimeout(function() {
-                map.removeLayer(tempMarker);
-            }, 3000);
-        }
-
-        function showCountryLabel(country, coordinates) {
-            if (countryLabel) {
-                map.removeLayer(countryLabel);
-            }
-
-            var labelIcon = L.divIcon({
-                className: 'country-label',
-                html: country,
-                iconSize: null
-            });
-
-            countryLabel = L.marker(coordinates, {
-                icon: labelIcon,
-                interactive: false,
-                zIndexOffset: 1000
-            }).addTo(map);
-
-            setTimeout(function() {
-                map.removeLayer(countryLabel);
-            }, 3000);
-        }
-
-        document.getElementById('goButton').onclick = goToSelectedCountry;
+        map.on('resize', updateMapView);
+        updateMapView();
     </script>
 </body>
 </html>
