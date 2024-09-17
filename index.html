@@ -3,70 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USGS 지진 지도</title>
+    <title>가상 재난 정보 지도</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/MarkerCluster.Default.css" />
     <style>
-        #map { height: 900px; }
-        #country-input { margin: 10px 0; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        #map { 
+            height: 100%;
+            width: 100%;
+        }
+        .legend-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: row-reverse;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
+        .legend-control {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 5px;
+            cursor: pointer;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            border-radius: 4px 0 0 4px;
+            width: 20px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: height 0.3s ease;
+        }
+        .legend-content {
+            background: white;
+            padding: 10px;
+            border-radius: 0 4px 4px 0;
+            overflow-y: auto;
+            display: none;
+            transition: height 0.3s ease;
+        }
+        .legend-content.open {
+            display: block;
+        }
+        .legend-item { 
+            display: flex; 
+            align-items: center; 
+            margin-bottom: 10px;
+            white-space: nowrap;
+        }
+        .legend-color { 
+            width: 20px;
+            height: 20px; 
+            margin-right: 10px; 
+            border-radius: 50%;
+            opacity: 0.8;
+            flex-shrink: 0;
+        }
+        .legend-item input[type="checkbox"] {
+            margin: 0 10px 0 0;
+        }
+        .disaster-icon {
+            width: 25px;
+            height: 41px;
+        }
+        .select-all {
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
-    <div id="country-input">
-        <input type="text" id="country" placeholder="국가 이름 입력">
-        <button onclick="moveToCountry()">이동</button>
-    </div>
     <div id="map"></div>
+    <div class="legend-container">
+        <div class="legend-content">
+            <div class="legend-item select-all">
+                <input type="checkbox" id="selectAll" checked>
+                <label for="selectAll">전체 선택</label>
+            </div>
+            <!-- Individual legend items will be dynamically added here -->
+        </div>
+        <div class="legend-control">
+            <strong>범례</strong>
+        </div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.0/leaflet.markercluster.js"></script>
     <script>
         const map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        const markers = L.markerClusterGroup();
+        const disasterTypes = {
+            'Earthquake': '#FF5733',
+            'Volcano': '#C70039',
+            'Tornado': '#900C3F',
+            'Storm': '#581845',
+            'Flood': '#2980B9',
+            'Wildfire': '#E67E22',
+            'Tsunami': '#3498DB',
+            'Drought': '#F1C40F'
+        };
+        const markers = {};
+        const markerClusters = L.markerClusterGroup({
+            disableClusteringAtZoom: 8,
+            spiderfyOnMaxZoom: false,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true
+        });
 
-        async function fetchEarthquakes() {
-            const response = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson');
-            const data = await response.json();
-            
-            data.features.forEach(quake => {
-                const coords = quake.geometry.coordinates;
-                const marker = L.marker([coords[1], coords[0]]);
-                
-                const popupContent = `
-                    <h3>규모 ${quake.properties.mag}</h3>
-                    <p>위치: ${quake.properties.place}</p>
-                    <p>시간: ${new Date(quake.properties.time).toLocaleString()}</p>
-                    <p>깊이: ${coords[2]} km</p>
-                    <a href="${quake.properties.url}" target="_blank">자세히 보기</a>
+        function createLegendAndControls() {
+            const legendContent = document.querySelector('.legend-content');
+            for (const [type, color] of Object.entries(disasterTypes)) {
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-color" style="background:${color}"></div>
+                    <input type="checkbox" id="${type}" checked>
+                    <label for="${type}">${type}</label>
                 `;
-                
-                marker.bindPopup(popupContent);
-                markers.addLayer(marker);
+                legendContent.appendChild(item);
+            }
+
+            // Toggle legend visibility
+            const legendToggle = document.querySelector('.legend-control');
+            const legendContainer = document.querySelector('.legend-content');
+            legendToggle.addEventListener('click', function() {
+                legendContainer.classList.toggle('open');
+                if (legendContainer.classList.contains('open')) {
+                    const itemCount = Object.keys(disasterTypes).length + 1; // +1 for "전체 선택"
+                    const itemHeight = 30; // Approximate height of each item
+                    const padding = 20; // Top and bottom padding
+                    const totalHeight = itemCount * itemHeight + padding;
+                    legendContainer.style.height = `${totalHeight}px`;
+                    legendToggle.style.height = `${totalHeight}px`;
+                } else {
+                    legendContainer.style.height = '0';
+                    legendToggle.style.height = '80px'; // Reset to original height
+                }
             });
 
-            map.addLayer(markers);
-        }
+            // Add event listener to "Select All" checkbox
+            document.getElementById('selectAll').addEventListener('change', function() {
+                const isChecked = this.checked;
+                for (const type in disasterTypes) {
+                    const checkbox = document.getElementById(type);
+                    checkbox.checked = isChecked;
+                    if (isChecked) {
+                        markerClusters.addLayer(markers[type]);
+                    } else {
+                        markerClusters.removeLayer(markers[type]);
+                    }
+                }
+            });
 
-        fetchEarthquakes();
-
-        async function moveToCountry() {
-            const country = document.getElementById('country').value;
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?country=${country}&format=json`);
-            const data = await response.json();
-            
-            if (data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lon = parseFloat(data[0].lon);
-                map.setView([lat, lon], 5);
-            } else {
-                alert('국가를 찾을 수 없습니다.');
+            // Add event listeners to individual checkboxes
+            for (const type in disasterTypes) {
+                document.getElementById(type).addEventListener('change', function() {
+                    if (this.checked) {
+                        markerClusters.addLayer(markers[type]);
+                    } else {
+                        markerClusters.removeLayer(markers[type]);
+                    }
+                    updateSelectAllCheckbox();
+                });
             }
         }
+
+        function updateSelectAllCheckbox() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const allChecked = Object.keys(disasterTypes).every(type => document.getElementById(type).checked);
+            selectAllCheckbox.checked = allChecked;
+        }
+
+        function createSVGIcon(color) {
+            return `
+                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" class="disaster-icon">
+                    <path fill="${color}" d="M12.5 0C5.596 0 0 5.596 0 12.5c0 1.886.796 4.02 1.866 6.154C3.827 22.79 12.5 41 12.5 41s8.673-18.21 10.634-22.346C24.204 16.52 25 14.386 25 12.5 25 5.596 19.404 0 12.5 0zm0 18.75c-3.452 0-6.25-2.798-6.25-6.25S9.048 6.25 12.5 6.25s6.25 2.798 6.25 6.25-2.798 6.25-6.25 6.25z"/>
+                </svg>
+            `;
+        }
+
+        // 가상의 재난 데이터 생성
+        const mockDisasters = [
+            { type: 'Earthquake', lat: 37.7749, lon: -122.4194, title: '샌프란시스코 지진' },
+            { type: 'Volcano', lat: -8.7573, lon: 116.2719, title: '인도네시아 화산 폭발' },
+            { type: 'Tornado', lat: 35.6762, lon: -97.4333, title: '오클라호마 토네이도' },
+            { type: 'Storm', lat: 25.7617, lon: -80.1918, title: '마이애미 허리케인' },
+            { type: 'Flood', lat: 29.9511, lon: -90.0715, title: '뉴올리언스 홍수' },
+            { type: 'Wildfire', lat: 34.0522, lon: -118.2437, title: '로스앤젤레스 산불' },
+            { type: 'Tsunami', lat: 35.6762, lon: 139.6503, title: '도쿄 쓰나미 경보' },
+            { type: 'Drought', lat: -33.8688, lon: 151.2093, title: '시드니 가뭄' },
+            { type: 'Earthquake', lat: 19.4326, lon: -99.1332, title: '멕시코시티 지진' },
+            { type: 'Volcano', lat: 14.6042, lon: 120.9822, title: '필리핀 화산 활동' },
+            { type: 'Tornado', lat: 39.0997, lon: -94.5786, title: '캔자스시티 토네이도' },
+            { type: 'Storm', lat: 18.4655, lon: -66.1057, title: '산후안 열대성 폭풍' },
+            { type: 'Flood', lat: 22.3964, lon: 114.1095, title: '홍콩 홍수' },
+            { type: 'Wildfire', lat: -37.8136, lon: 144.9631, title: '멜버른 부시파이어' },
+            { type: 'Tsunami', lat: -12.0464, lon: -77.0428, title: '리마 쓰나미 위험' },
+            { type: 'Drought', lat: -1.2921, lon: 36.8219, title: '나이로비 가뭄' },
+            { type: 'Earthquake', lat: 41.9028, lon: 12.4964, title: '로마 지진' },
+            { type: 'Volcano', lat: -33.0458, lon: -71.6197, title: '칠레 화산 폭발' },
+            { type: 'Tornado', lat: 41.8781, lon: -87.6298, title: '시카고 토네이도' },
+            { type: 'Storm', lat: 13.7563, lon: 100.5018, title: '방콕 몬순' },
+            { type: 'Flood', lat: 51.5074, lon: -0.1278, title: '런던 홍수' },
+            { type: 'Wildfire', lat: 49.2827, lon: -123.1207, title: '밴쿠버 산불' },
+            { type: 'Tsunami', lat: -33.9249, lon: 18.4241, title: '케이프타운 쓰나미 경보' },
+            { type: 'Drought', lat: 28.6139, lon: 77.2090, title: '뉴델리 가뭄' },
+            { type: 'Earthquake', lat: 55.7558, lon: 37.6173, title: '모스크바 지진' },
+            { type: 'Volcano', lat: -0.2295, lon: -78.5243, title: '키토 화산 활동' },
+            { type: 'Tornado', lat: 32.7157, lon: -117.1611, title: '샌디에고 토네이도' },
+            { type: 'Storm', lat: 1.3521, lon: 103.8198, title: '싱가포르 태풍' },
+            { type: 'Flood', lat: 48.8566, lon: 2.3522, title: '파리 홍수' },
+            { type: 'Wildfire', lat: -35.2809, lon: 149.1300, title: '캔버라 산불' }
+        ];
+
+        mockDisasters.forEach(event => {
+            if (!markers[event.type]) {
+                markers[event.type] = L.layerGroup();
+            }
+
+            const icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: createSVGIcon(disasterTypes[event.type]),
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34]
+            });
+
+            const marker = L.marker([event.lat, event.lon], {icon: icon})
+                .bindPopup(`<b>${event.type}</b><br>${event.title}`);
+            markers[event.type].addLayer(marker);
+        });
+
+        for (const type in markers) {
+            markerClusters.addLayer(markers[type]);
+        }
+        map.addLayer(markerClusters);
+
+        createLegendAndControls();
     </script>
 </body>
 </html>
