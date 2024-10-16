@@ -3,174 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>업체 및 재난 클러스터링 지도</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <title>USGS 지진 정보 지도 (개선된 마커 및 팝업)</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
     <style>
-        #map { height: 98vh; }
-        .custom-cluster-icon {
-            text-align: center;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            font-size: 12px;
-            border: 1px solid white; /* 테두리 색상을 흰색으로 변경 */
-        }
-        .business-cluster {
-            background-color: rgba(173, 216, 230, 0.9);
-            width: 30px !important;
-            height: 30px !important;
-            margin-left: -15px !important;
-            margin-top: -15px !important;
-            box-shadow: 0 0 15px rgba(173, 216, 230, 0.8);
-        }
-        .disaster-cluster {
-            background-color: rgba(255, 165, 0, 0.6);
-            width: 30px !important;
-            height: 30px !important;
-            margin-left: -15px !important;
-            margin-top: -15px !important;
-            color: #333333;
-            font-weight: bold;
-        }
-        .business-cluster .cluster-number {
+        body { margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; }
+        #map { flex-grow: 1; width: 100%; }
+        #legend {
             position: absolute;
-            top: -8px;
-            right: -8px;
-            background-color: rgba(255, 255, 255, 0.9);
-            color: #003399;
-            width: 16px;
-            height: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: bold;
-            border-radius: 2px;
-            border: 0.5px solid white; /* 숫자 표시 테두리도 흰색으로 변경 */
+            bottom: 40px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1;
         }
-        .factory-icon {
-            width: 24px;
-            height: 24px;
+        .legend-item {
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
+            vertical-align: middle;
+            border: 1px solid #000;
+        }
+        #status-bar {
+            height: 30px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            line-height: 30px;
+            z-index: 2;
+        }
+        .mapboxgl-popup-content {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            font-family: Arial, sans-serif;
+        }
+        .popup-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .popup-info {
+            font-size: 14px;
+            color: #666;
+        }
+        .popup-magnitude {
+            font-size: 18px;
+            font-weight: bold;
+            color: #e74c3c;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <div id='map'></div>
+    <div id='legend'>
+        <h3>지진 규모</h3>
+        <div class='legend-item'><span class='legend-color' style='background: #00FF00;'></span> 0-3</div>
+        <div class='legend-item'><span class='legend-color' style='background: #FFFF00;'></span> 3-4</div>
+        <div class='legend-item'><span class='legend-color' style='background: #FFA500;'></span> 4-5</div>
+        <div class='legend-item'><span class='legend-color' style='background: #FF0000;'></span> 5+</div>
+        <h3>클러스터</h3>
+        <div class='legend-item'><span class='legend-color' style='background: #51bbd6;'></span> &lt; 100</div>
+        <div class='legend-item'><span class='legend-color' style='background: #f1f075;'></span> 100-750</div>
+        <div class='legend-item'><span class='legend-color' style='background: #f28cb1;'></span> 750+</div>
+    </div>
+    <div id='status-bar'>위도: 0.00000°, 경도: 0.00000°</div>
     <script>
-        // 지도 초기화
-        var map = L.map('map').setView([36.5, 127.5], 7);
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic3RldmUtc29uZzAxIiwiYSI6ImNtMmJzbjMwajB4cnEybHF3MmZ2enBzMGUifQ.7DuFIEhjnHvCgodL3cigbg'; // Mapbox 액세스 토큰을 여기에 입력하세요
+        var map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-streets-v12',
+            center: [0, 0],
+            zoom: 1.5,
+            minZoom: 1,
+            maxBounds: [
+                [-180, -85],
+                [180, 85]
+            ]
+        });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        // 아이콘 정의
-        function createIcon(color) {
-            return L.icon({
-                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41]
+        map.on('load', function () {
+            map.addSource('earthquakes', {
+                type: 'geojson',
+                data: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson',
+                cluster: true,
+                clusterMaxZoom: 14,
+                clusterRadius: 50
             });
-        }
 
-        var icons = {
-            business: createIcon('red'),
-            earthquake: createIcon('blue'),
-            flood: createIcon('green'),
-            fire: createIcon('orange'),
-            landslide: createIcon('violet')
-        };
-
-        // 회색 공장 아이콘 SVG
-        var factoryIconSvg = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="factory-icon">
-            <defs>
-                <radialGradient id="nightGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                    <stop offset="0%" style="stop-color:rgb(255,255,255);stop-opacity:0.7" />
-                    <stop offset="100%" style="stop-color:rgb(173,216,230);stop-opacity:0" />
-                </radialGradient>
-            </defs>
-            <circle cx="12" cy="12" r="11" fill="url(#nightGlow)" />
-            <path d="M 2,21 H 22 V 8 L 17,10 V 7 L 12,9 V 3 H 8 V 14 L 2,16 Z" fill="#808080"/>
-            <rect x="4" y="17" width="2" height="2" fill="#FFD700" opacity="0.9"/>
-            <rect x="8" y="17" width="2" height="2" fill="#FFD700" opacity="0.9"/>
-            <rect x="12" y="17" width="2" height="2" fill="#FFD700" opacity="0.9"/>
-            <rect x="16" y="17" width="2" height="2" fill="#FFD700" opacity="0.9"/>
-        </svg>`;
-
-        // 클러스터 그룹 생성 함수
-        function createClusterGroup(className, isBusinessCluster) {
-            return L.markerClusterGroup({
-                iconCreateFunction: function(cluster) {
-                    var childCount = cluster.getChildCount();
-                    var html = isBusinessCluster 
-                        ? `${factoryIconSvg}<div class="cluster-number">${childCount}</div>`
-                        : `${childCount}`;
-                    return L.divIcon({
-                        html: html,
-                        className: 'custom-cluster-icon ' + className,
-                        iconSize: L.point(32, 32)
-                    });
+            map.addLayer({
+                id: 'clusters',
+                type: 'circle',
+                source: 'earthquakes',
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': [
+                        'step',
+                        ['get', 'point_count'],
+                        '#51bbd6',
+                        100,
+                        '#f1f075',
+                        750,
+                        '#f28cb1'
+                    ],
+                    'circle-radius': [
+                        'step',
+                        ['get', 'point_count'],
+                        20,
+                        100,
+                        30,
+                        750,
+                        40
+                    ],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#fff'
                 }
             });
-        }
 
-        // 클러스터 그룹 생성
-        var businessCluster = createClusterGroup('business-cluster', true);
-        var disasterCluster = createClusterGroup('disaster-cluster', false);
-
-        // 샘플 데이터 생성 함수
-        function generateRandomData(count, type, minLat, maxLat, minLng, maxLng) {
-            var data = [];
-            for (var i = 0; i < count; i++) {
-                var lat = Math.random() * (maxLat - minLat) + minLat;
-                var lng = Math.random() * (maxLng - minLng) + minLng;
-                data.push({
-                    name: type + " " + (i + 1),
-                    lat: lat,
-                    lng: lng,
-                    type: type
-                });
-            }
-            return data;
-        }
-
-        // 샘플 데이터 생성
-        var businesses = generateRandomData(100, "business", 33.0, 38.0, 125.0, 130.0);
-        var earthquakes = generateRandomData(30, "earthquake", 35.0, 38.0, 126.0, 129.0);
-        var floods = generateRandomData(40, "flood", 34.0, 37.0, 126.5, 128.5);
-        var fires = generateRandomData(50, "fire", 35.5, 37.5, 127.0, 129.0);
-        var landslides = generateRandomData(20, "landslide", 36.0, 38.0, 127.5, 129.5);
-
-        // 마커 추가 함수
-        function addMarkers(data, clusterGroup, icon) {
-            data.forEach(function(item) {
-                var marker = L.marker([item.lat, item.lng], {icon: icon})
-                    .bindPopup(item.name);
-                clusterGroup.addLayer(marker);
+            map.addLayer({
+                id: 'cluster-count',
+                type: 'symbol',
+                source: 'earthquakes',
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': '{point_count_abbreviated}',
+                    'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+                    'text-size': 12
+                },
+                paint: {
+                    'text-color': '#ffffff'
+                }
             });
-        }
 
-        // 마커 추가
-        addMarkers(businesses, businessCluster, icons.business);
-        addMarkers(earthquakes, disasterCluster, icons.earthquake);
-        addMarkers(floods, disasterCluster, icons.flood);
-        addMarkers(fires, disasterCluster, icons.fire);
-        addMarkers(landslides, disasterCluster, icons.landslide);
+            map.addLayer({
+                id: 'unclustered-point',
+                type: 'circle',
+                source: 'earthquakes',
+                filter: ['!', ['has', 'point_count']],
+                paint: {
+                    'circle-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'mag'],
+                        0, '#00FF00',
+                        3, '#FFFF00',
+                        4, '#FFA500',
+                        5, '#FF0000'
+                    ],
+                    'circle-radius': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'mag'],
+                        0, 5,
+                        6, 20
+                    ],
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#fff',
+                    'circle-opacity': 0.8
+                }
+            });
 
-        // 클러스터를 지도에 추가
-        map.addLayer(businessCluster);
-        map.addLayer(disasterCluster);
+            // 클러스터 클릭 이벤트
+            map.on('click', 'clusters', function (e) {
+                var features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+                var clusterId = features[0].properties.cluster_id;
+                map.getSource('earthquakes').getClusterExpansionZoom(clusterId, function (err, zoom) {
+                    if (err) return;
+                    map.easeTo({
+                        center: features[0].geometry.coordinates,
+                        zoom: zoom
+                    });
+                });
+            });
+
+            // 개별 지진 클릭 이벤트
+            map.on('click', 'unclustered-point', function (e) {
+                var coordinates = e.features[0].geometry.coordinates.slice();
+                var mag = e.features[0].properties.mag;
+                var place = e.features[0].properties.place;
+                var time = new Date(e.features[0].properties.time).toLocaleString();
+
+                new mapboxgl.Popup()
+                    .setLngLat(coordinates)
+                    .setHTML(`
+                        <div class="popup-title">지진 정보</div>
+                        <div class="popup-info">
+                            <strong>규모:</strong> <span class="popup-magnitude">${mag}</span><br>
+                            <strong>위치:</strong> ${place}<br>
+                            <strong>시간:</strong> ${time}
+                        </div>
+                    `)
+                    .addTo(map);
+            });
+
+            // 마우스 커서 변경
+            map.on('mouseenter', 'clusters', function () {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'clusters', function () {
+                map.getCanvas().style.cursor = '';
+            });
+            map.on('mouseenter', 'unclustered-point', function () {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'unclustered-point', function () {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // 마우스 이동 시 좌표 업데이트
+            map.on('mousemove', function (e) {
+                document.getElementById('status-bar').innerHTML = 
+                    '위도: ' + e.lngLat.lat.toFixed(5) + '°, 경도: ' + e.lngLat.lng.toFixed(5) + '°';
+            });
+        });
     </script>
 </body>
 </html>
